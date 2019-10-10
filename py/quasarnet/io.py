@@ -430,7 +430,7 @@ def export_data(fout,tids,data):
     h.close()
 
 
-def read_desi_spectra(fin, ignore_quasar_mask=False):
+def read_desi_spectra(fin, ignore_quasar_mask=False, verbose=True):
     try:
         from desitarget import desi_mask
         quasar_mask = desi_mask.mask('QSO')
@@ -444,7 +444,8 @@ def read_desi_spectra(fin, ignore_quasar_mask=False):
     if ignore_quasar_mask:
         wqso |= 1
     wqso = wqso>0
-    print("INFO: found {} quasar targets".format(wqso.sum()))
+    if verbose:
+        print("INFO: found {} quasar targets".format(wqso.sum()))
     tids = h[1]["TARGETID"][:][wqso]
     utids = np.unique(tids)
 
@@ -473,7 +474,8 @@ def read_desi_spectra(fin, ignore_quasar_mask=False):
     fl[w]/=iv[w]
     fl = np.hstack((fl,iv))
 
-    print("INFO: founds {} good spectra".format(wqso.sum()))
+    if verbose:
+        print("INFO: founds {} good spectra".format(wqso.sum()))
     return utids, fl
 
 
