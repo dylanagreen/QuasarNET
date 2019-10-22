@@ -107,6 +107,8 @@ def read_data(fi, truth=None, z_lim=2.1,
         if nspec is None:
             nspec = h[1].get_nrows()
         aux_tids = h[1]['TARGETID'][:nspec].astype(int)
+        print("INFO: found {} spectra in file {}".format(aux_tids.shape[0], f))
+        
         ## remove thing_id == -1 or not in sdrq
         w = (aux_tids != -1) 
         if truth is not None:
@@ -128,8 +130,6 @@ def read_data(fi, truth=None, z_lim=2.1,
         X.append(aux_X)
         tids.append(aux_tids)
         
-        print("INFO: found {} spectra in file {}".format(aux_tids.shape, f))
-
     tids = np.concatenate(tids)
     X = np.concatenate(X)
 
@@ -178,6 +178,7 @@ def read_data(fi, truth=None, z_lim=2.1,
     ## remove zconf == 0 (not inspected)
     observed = [(truth[t].class_person>0) or (truth[t].z_conf_person>0) for t in tids]
     observed = np.array(observed, dtype=bool)
+    print("INFO: removing {} spectra that were not inspected".format((~np.array(observed)).sum()))
     tids = tids[observed]
     X = X[observed]
 
@@ -224,6 +225,8 @@ def read_data(fi, truth=None, z_lim=2.1,
 
     ## check that all spectra have exactly one classification
     assert (Y.sum(axis=1).min()==1) and (Y.sum(axis=1).max()==1)
+
+    print("INFO: {} spectra in returned dataset".format(tids.shape[0]))
 
     if return_pmf:
         return tids,X,Y,z,bal,plate,mjd,fid
