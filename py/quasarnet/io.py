@@ -12,7 +12,7 @@ from os.path import dirname
 
 def read_sdrq(sdrq):
     '''
-    Constructs two dictionaries thing_id: class, z_conf, z, 
+    Constructs two dictionaries thing_id: class, z_conf, z,
             and (plate, mjd, fiberid): thing_id
     input: (str) full path to Superset_DRQ.fits
     output: (list of dictionaries)
@@ -44,7 +44,7 @@ def read_truth(fi):
         truth -- dictionary of THING_ID: metadata instance
 
     '''
-    
+
     class metadata:
         pass
 
@@ -66,9 +66,8 @@ def read_truth(fi):
             truth[t] = m
 
     return truth
-    
-def read_data(fi, truth=None, z_lim=2.1, 
-        return_pmf=False, nspec=None):
+
+def read_data(fi, truth=None, z_lim=2.1, return_pmf=False, nspec=None):
     '''
     reads data from input file
 
@@ -82,14 +81,14 @@ def read_data(fi, truth=None, z_lim=2.1,
     Returns:
         tids -- list of thing_ids
         X -- spectra reformatted to be fed to the network (numpy array)
-        Y -- truth vector (nqso, 5): 
+        Y -- truth vector (nqso, 5):
                            STAR = (1,0,0,0,0), GAL = (0,1,0,0,0)
                            QSO_LZ = (0,0,1,0,0), QSO_HZ = (0,0,0,1,0)
                            BAD = (0,0,0,0,1)
         z -- redshift (numpy array)
         bal -- 1 if bal, 0 if not (numpy array)
     '''
-    
+
     tids = []
     X = []
     Y = []
@@ -108,17 +107,21 @@ def read_data(fi, truth=None, z_lim=2.1,
             nspec = h[1].get_nrows()
         aux_tids = h[1]['TARGETID'][:nspec].astype(int)
         print("INFO: found {} spectra in file {}".format(aux_tids.shape[0], f))
-        
+
         ## remove thing_id == -1 or not in sdrq
-        w = (aux_tids != -1) 
+        w = (aux_tids != -1)
+        print("INFO: removing {} spectra with thing_id=-1".format((~w).sum()),flush=True)
+        aux_tids = aux_tids[w]
+        aux_X = h[0][:nspec,:]
+        aux_X = aux_X[w]
+
         if truth is not None:
             w_in_truth = np.in1d(aux_tids, list(truth.keys()))
             print("INFO: removing {} spectra missing in truth".format((~w_in_truth).sum()),flush=True)
-            w &= w_in_truth
-        aux_tids = aux_tids[w]
-        aux_X = h[0][:nspec,:]
+            aux_tids = aux_tids[w_in_truth]
+            aux_X = h[0][:nspec,:]
+            aux_X = aux_X[w_in_truth]
 
-        aux_X = aux_X[w]
         if return_pmf:
             aux_plate = h[1]['PLATE'][:][w]
             aux_mjd = h[1]['MJD'][:][w]
@@ -126,10 +129,10 @@ def read_data(fi, truth=None, z_lim=2.1,
             plate += list(aux_plate)
             mjd += list(aux_mjd)
             fid += list(aux_fid)
-        
+
         X.append(aux_X)
         tids.append(aux_tids)
-        
+
     tids = np.concatenate(tids)
     X = np.concatenate(X)
 
@@ -150,7 +153,7 @@ def read_data(fi, truth=None, z_lim=2.1,
         fid = fid[~w]
 
     mdata = np.average(X[:,:443], weights = X[:,443:], axis=1)
-    sdata = np.average((X[:,:443]-mdata[:,None])**2, 
+    sdata = np.average((X[:,:443]-mdata[:,None])**2,
             weights = X[:,443:], axis=1)
     sdata=np.sqrt(sdata)
 
@@ -174,7 +177,7 @@ def read_data(fi, truth=None, z_lim=2.1,
             return tids,X,plate,mjd,fid
         else:
             return tids,X
-    
+
     ## remove zconf == 0 (not inspected)
     observed = [(truth[t].class_person>0) or (truth[t].z_conf_person>0) for t in tids]
     observed = np.array(observed, dtype=bool)
@@ -191,11 +194,11 @@ def read_data(fi, truth=None, z_lim=2.1,
     z = np.zeros(X.shape[0])
     z[:] = [truth[t].z_vi for t in tids]
 
-    ## fill bal 
+    ## fill bal
     bal = np.zeros(X.shape[0])
     bal[:] = [(truth[t].bal_flag_vi*(truth[t].bi_civ>0))-\
             (not truth[t].bal_flag_vi)*(truth[t].bi_civ==0) for t in tids]
-    
+
     ## fill classes
     ## classes: 0 = STAR, 1=GALAXY, 2=QSO_LZ, 3=QSO_HZ, 4=BAD (zconf != 3)
     nclasses = 5
@@ -247,7 +250,6 @@ def read_desi_truth(fin):
         assert isinstance(c,int)
         truth[t] = (c,3,z)
     return truth
-
 
 llmin = np.log10(3600)
 llmax = np.log10(10000)
@@ -348,7 +350,7 @@ def read_spall(spall):
 def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
 
     '''
-    Given a list of plates, returns the thing_id list and the 
+    Given a list of plates, returns the thing_id list and the
         rebinned fluxes for all the exposures in the plates
 
     input:
@@ -384,7 +386,6 @@ def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
             print('{} {} not in list'.format(plateid,m))
             continue
 
-
         exps = []
         ## read b,r exposures
         try:
@@ -407,7 +408,7 @@ def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
             irand1 = randint(0,len(exps_spectro_1)-1)
             irand2 = randint(0,len(exps_spectro_2)-1)
             exps = [exps_spectro_1[irand1], exps_spectro_2[irand2]]
-         
+
         for exp_b, exp_r in exps:
             spcframe_b = dirname(p)+"/spCFrame-{}.fits".format(exp_b)
             spcframe_r = dirname(p)+"/spCFrame-{}.fits".format(exp_r)
@@ -431,7 +432,6 @@ def export_data(fout,tids,data):
     tids = np.array(tids)
     h.write([tids],names=["TARGETID"],extname="METADATA")
     h.close()
-
 
 def read_desi_spectra(fin, ignore_quasar_mask=False, verbose=True):
     try:
@@ -481,7 +481,6 @@ def read_desi_spectra(fin, ignore_quasar_mask=False, verbose=True):
         print("INFO: founds {} good spectra".format(wqso.sum()))
     return utids, fl
 
-
 def read_spplate(fin, fibers):
 
     '''
@@ -494,14 +493,14 @@ def read_spplate(fin, fibers):
     c1 = head["COEFF1"]
     p = head["PLATEID"]
     m = head["MJD"]
-    
+
     fids = h[5]["FIBERID"][:]
     wqso = np.in1d(fids, fibers)
     fids=fids[wqso]
 
     nspec = len(fibers)
     nbins = int((llmax-llmin)/dll)
-    fl = np.zeros((nspec, nbins)) 
+    fl = np.zeros((nspec, nbins))
     iv = np.zeros((nspec, nbins))
     nbins = fl.shape[1]
 
@@ -535,7 +534,7 @@ def read_spplate(fin, fibers):
 from .utils import absorber_IGM
 from scipy.interpolate import interp1d
 def box_offset(z, line='LYA', nboxes = 13):
-    wave_to_i = interp1d(wave, np.arange(len(wave)), 
+    wave_to_i = interp1d(wave, np.arange(len(wave)),
             bounds_error=False, fill_value=-1)
     wave_line = (1+z)*absorber_IGM[line]
     pos = wave_to_i(wave_line)/len(wave)*nboxes
@@ -552,23 +551,23 @@ def box_offset(z, line='LYA', nboxes = 13):
 
     return box, offset, weights
 
-def objective(z, Y, bal, lines=['LYA'],
-        lines_bal=['CIV(1548)'], nboxes=13):
+def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13):
+
     box=[]
     sample_weight = []
     for l in lines:
-        box_line, offset_line, weight_line = box_offset(z, 
+        box_line, offset_line, weight_line = box_offset(z,
                 line = l, nboxes=nboxes)
 
         w = (Y.argmax(axis=1)==2) | (Y.argmax(axis=1)==3)
-        ## set to zero where object is not a QSO 
+        ## set to zero where object is not a QSO
         ## (the line confidence should be zero)
         box_line[~w]=0
         box.append(np.concatenate([box_line, offset_line], axis=-1))
         sample_weight.append(np.ones(Y.shape[0]))
 
     for l in lines_bal:
-        box_line, offset_line, weight_line = box_offset(z, 
+        box_line, offset_line, weight_line = box_offset(z,
                 line = l, nboxes=nboxes)
 
         ## set to zero for non-quasars
@@ -583,5 +582,5 @@ def objective(z, Y, bal, lines=['LYA'],
         bal_weight = bal != 0
         box.append(np.concatenate([box_line, offset_line], axis=-1))
         sample_weight.append(bal_weight)
-    
+
     return box, sample_weight
