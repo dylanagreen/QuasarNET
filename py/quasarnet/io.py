@@ -119,7 +119,6 @@ def read_data(fi, truth=None, z_lim=2.1, return_pmf=False, nspec=None):
             w_in_truth = np.in1d(aux_tids, list(truth.keys()))
             print("INFO: removing {} spectra missing in truth".format((~w_in_truth).sum()),flush=True)
             aux_tids = aux_tids[w_in_truth]
-            aux_X = h[0][:nspec,:]
             aux_X = aux_X[w_in_truth]
 
         if return_pmf:
