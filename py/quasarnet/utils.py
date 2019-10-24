@@ -36,13 +36,13 @@ def process_preds(preds, lines, lines_bal):
     nlines = len(lines)
     c_line=zeros((nlines, nspec))
     z_line=zeros((nlines, nspec))
-    i_to_wave = interp1d(arange(len(wave)), wave, 
+    i_to_wave = interp1d(arange(len(wave)), wave,
             bounds_error=False, fill_value='extrapolate')
 
     for il in range(len(lines)):
         l=absorber_IGM[lines[il]]
         j = preds[il][:,:13].argmax(axis=1)
-        offset  = preds[il][arange(nspec, dtype=int), nboxes+j]
+        offset = preds[il][arange(nspec, dtype=int), nboxes+j]
         c_line[il]=preds[il][:,:13].max(axis=1)
         z_line[il]=i_to_wave((j+offset)*len(wave)/nboxes)/l-1
 
@@ -98,8 +98,8 @@ absorber_IGM = {
     'NI(1200)'    : 1200.,
     'SiII(1193)'  : 1193.2897,
     'SiII(1190)'  : 1190.4158,
-    'OI(1039)'    : 1039.230, 
-    'OVI(1038)'   : 1037.613, 
+    'OI(1039)'    : 1039.230,
+    'OVI(1038)'   : 1037.613,
     'OVI(1032)'   : 1031.912,
     'LYB'         : 1025.72,
 }
