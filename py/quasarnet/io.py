@@ -7,6 +7,7 @@ from numpy import random
 import fitsio
 from random import randint
 from os.path import dirname
+from quasarnet import utils
 
 
 def read_sdrq(sdrq):
@@ -235,9 +236,9 @@ def read_data(fi, truth=None, z_lim=2.1, return_pmf=False, nspec=None):
     return tids,X,Y,z,bal
 
 # TODO: move this somewhere else? Feels an odd place to keep it?
-# Made a function utils.get_wave to replace this. Has these llmin/llmax/dll as
-# default but can be overridden. Currently cannot be overriden in a different
-# way e.g. using evenly spaced pixels in linear wavelength.
+# Made a class utils.Wave to replace this. Has these llmin/llmax/dll as
+# default but can add functionality to overwrite this with relative ease. Left
+# without for now to avoid any potential issues.
 llmin = np.log10(3600)
 llmax = np.log10(10000)
 dll = 1e-3
@@ -247,6 +248,19 @@ nmasked_max = len(wave)+1
 
 ## spcframe = individual exposures of spectra
 def read_spcframe(b_spcframe,r_spcframe):
+
+    '''
+    reads data from spcframes
+
+    Arguments:
+        b_spcframe -- spcframe from b part of spectrograph
+        r_spcframe -- spcframe from r part of spectrograph
+
+    Returns:
+        fids -- fiberids ?
+        data -- ?
+    '''
+
     data = []
     fids = []
 
@@ -324,67 +338,100 @@ def read_spcframe(b_spcframe,r_spcframe):
 
 ## ??
 def read_spall(spall):
+
+    '''
+    reads data from spall file
+
+    Arguments:
+        spall -- filename of spall file
+
+    Returns:
+        tid -- array of tids
+        pmf2tid -- dictionary mapping (plate,mjd,fiber_id) => thing_id
+    '''
+
+    ## Open the file, and read plate, mjd, fiberid, thing_id, specprimary.
     spall = fitsio.FITS(spall)
-    plate=spall[1]["PLATE"][:]
+    plate = spall[1]["PLATE"][:]
     mjd = spall[1]["MJD"][:]
     fid = spall[1]["FIBERID"][:]
     tid = spall[1]["THING_ID"][:].astype(int)
-    specprim=spall[1]["SPECPRIMARY"][:]
+    specprim = spall[1]["SPECPRIMARY"][:]
 
+    ## Construct a dictionary mapping plate, mjd and fiberid to thing_id.
     pmf2tid = {(p,m,f):t for p,m,f,t,s in zip(plate,mjd,fid,tid,specprim)}
     spall.close()
-    return pmf2tid
+
+    return tid, pmf2tid
 
 ## spplate = coadded spectra
 def read_spplate(fin, fibers):
 
     '''
     reads data from spplates
+
+    Arguments:
+        fin -- spplate file to read
+        fibers -- list of fiberids
+
+    Returns:
+        fids -- fiberids ?
+        fl -- flux/iv ?
     '''
 
-    h=fitsio.FITS(fin)
+    ## Open the file and read data from the header.
+    h = fitsio.FITS(fin)
     head = h[0].read_header()
     c0 = head["COEFF0"]
     c1 = head["COEFF1"]
     p = head["PLATEID"]
     m = head["MJD"]
 
+    ## Filter the fiberids in the file by those we're interested in.
     fids = h[5]["FIBERID"][:]
     wqso = np.in1d(fids, fibers)
-    fids=fids[wqso]
+    fids = fids[wqso]
 
+    ## Construct the grids for flux and iv.
     nspec = len(fibers)
-    nbins = int((llmax-llmin)/dll)
-    fl = np.zeros((nspec, nbins))
-    iv = np.zeros((nspec, nbins))
-    nbins = fl.shape[1]
+    wave_out = utils.Wave()
+    fl = np.zeros((nspec, wave_out.nbins))
+    iv = np.zeros((nspec, wave_out.nbins))
 
+    ## Read the data from file.
     fl_aux = h[0].read()[wqso,:]
     iv_aux = h[1].read()[wqso,:]*((h[2].read()[wqso]&2**25)==0)
-    wave = 10**(c0 + c1*np.arange(fl_aux.shape[1]))
-    bins = np.floor((np.log10(wave)-llmin)/dll).astype(int)
-    w = (bins>=0) & (bins<nbins)
-    bins = bins[w]
 
-    fl_aux=fl_aux[:,w]
-    iv_aux=iv_aux[:,w]
+    ## Calculate how to rebin the data.
+    wave_grid = 10**(c0 + c1*np.arange(fl_aux.shape[1]))
+    bins, w = rebin_wave(wave_grid,wave_out)
+    bins = bins[w]
+    fl_aux = fl_aux[:,w]
+    iv_aux =iv_aux[:,w]
+
+    ## For each spectrum, rebin the flux and iv and add them to the pre-
+    ## constructed grids.
     for i in range(nspec):
         c = np.bincount(bins, weights=fl_aux[i]*iv_aux[i])
         fl[i,:len(c)] += c
         c = np.bincount(bins, weights = iv_aux[i])
         iv[i,:len(c)]+=c
 
+    ## Normalise the flux and stack fl and iv.
     w = iv>0
-    fl[w]/=iv[w]
+    fl[w] /= iv[w]
     fl = np.hstack((fl,iv))
-    print(fl.shape)
-    wbad = iv==0
-    w=wbad.sum(axis=1)>nmasked_max
+
+    ## Filter out spectra with too many bad pixels.
+    wbad = (iv==0)
+    w = (wbad.sum(axis=1)>nmasked_max)
     print('INFO: rejecting {} spectra with too many bad pixels'.format(w.sum()))
     if (~w).sum()==0:
         return None
-    fl=fl[~w,:]
-    return fids[~w],fl
+    fl = fl[~w,:]
+    fids = fids[~w]
+
+    return fids, fl
 
 ## ??
 def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
@@ -479,16 +526,21 @@ def export_data(fout,tids,data):
 from .utils import absorber_IGM
 from scipy.interpolate import interp1d
 def box_offset(z, line='LYA', nboxes = 13):
-    wave_to_i = interp1d(wave, np.arange(len(wave)),
+
+    wave = utils.Wave()
+
+    ## Interpolate the locations of the line in each object in terms of
+    ## wavelength to the position in terms of the number of boxes.
+    wave_to_i = interp1d(wave.wave_grid, np.arange(len(wave.wave_grid)),
             bounds_error=False, fill_value=-1)
     wave_line = (1+z)*absorber_IGM[line]
-    pos = wave_to_i(wave_line)/len(wave)*nboxes
+    pos = wave_to_i(wave_line)/len(wave.wave_grid)*nboxes
     ipos = np.floor(pos).astype(int)
 
     box = np.zeros((len(z), nboxes))
     offset = np.zeros((len(z), nboxes))
 
-    w = ipos>=0
+    w = (ipos>=0)
     box[w, ipos[w]] = 1
     offset[w, ipos[w]] = (pos-ipos)[w]
     weights = np.ones(len(z))
@@ -502,6 +554,7 @@ def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13):
     box=[]
     sample_weight = []
     for l in lines:
+        # TODO: Do we need to use "weight_line"?
         box_line, offset_line, weight_line = box_offset(z,
                 line = l, nboxes=nboxes)
 
@@ -631,10 +684,11 @@ def read_desi_data(fi, truth=None, z_lim=2.1, return_pmf=False, nspec=None):
         mjd = []
         fid = []
 
+    wave_out = utils.Wave()
+
     ## Go through the files, loading data from each one.
     for f in fi:
         h = fitsio.FITS(f)
-        nbins = int((llmax-llmin)/dll)
 
         # Apply the mask.
         wqso = h[1]['DESI_TARGET'][:]
@@ -651,8 +705,7 @@ def read_desi_data(fi, truth=None, z_lim=2.1, return_pmf=False, nspec=None):
             h_wave = h["{}_WAVELENGTH".format(band)].read()
 
             ## new system
-            bins = rebin_wave(h_wave,wave)
-            w = (bins>=0) & (bins<len(wave))
+            bins, w = rebin_wave(h_wave,wave_out)
             h_wave = h_wave[w]
             bins = bins[w]
 
@@ -818,12 +871,21 @@ def read_desi_data(fi, truth=None, z_lim=2.1, return_pmf=False, nspec=None):
 
     return tids,X,Y,z,bal
 
-def rebin_wave(wave_in,wave_out):
+def rebin_wave(wave_grid_in,wave_out):
 
-    wave_edges = np.concatenate(([wave_out[0]-(wave_out[1]-wave_out[0])/2],(wave_out[1:]+wave_out[:-1])/2,[wave_out[-1]+(wave_out[-1]-wave_out[-2])/2]))
-    bins = np.searchsorted(wave_edges,wave_in)-1
+    # Potential new system.
+    #wave_grid_out = wave_out.wave_grid
+    #wave_edges = np.concatenate(([wave_grid_out[0]-(wave_grid_out[1]-wave_grid_out[0])/2],(wave_grid_out[1:]+wave_grid_out[:-1])/2,[wave_grid_out[-1]+(wave_grid_out[-1]-wave_grid_out[-2])/2]))
+    #bins = np.searchsorted(wave_edges,wave_grid_in)-1
 
-    return bins
+    # Old system:
+    # This system treats the output wave grid as the lower bounds of the bins.
+    # It is implemented consistently and so does not introduce a bias as a
+    # result of the floor function.
+    bins = np.floor((np.log10(wave_grid_in)-wave_out.llmin)/wave_out.dll).astype(int)
+    w = (bins>=0) & (bins<wave_out.nbins)
+
+    return bins, w
 
 # TODO: Make sure that this is up to date.
 # TODO: Integrate with function to read desi truth like 'read_data'
@@ -835,7 +897,7 @@ def read_desi_spectra(fin, ignore_quasar_mask=False, verbose=True):
         quasar_mask = desi_mask.mask('QSO')
     except:
         print("WARN: can't load desi_mask, using hardcoded targetting value!")
-        quasar_mask = 2
+        quasar_mask = 2**2
 
     if not isinstance(fin,list):
         fin = [fin]
@@ -845,15 +907,16 @@ def read_desi_spectra(fin, ignore_quasar_mask=False, verbose=True):
     utids_list = []
     nqso = 0
 
+    wave_out = utils.Wave()
+
     for f in fin:
         h = fitsio.FITS(f)
-        nbins = int((llmax-llmin)/dll)
 
         # Apply the mask.
         wqso = h[1]['DESI_TARGET'][:] & quasar_mask
         if ignore_quasar_mask:
             wqso |= 1
-        wqso = wqso>0
+        wqso = (wqso>0)
         nqso_f = wqso.sum()
         print("INFO: found {} quasar targets".format(nqso_f))
         tids = h[1]["TARGETID"][:][wqso]
@@ -866,25 +929,9 @@ def read_desi_spectra(fin, ignore_quasar_mask=False, verbose=True):
         for band in ["B", "R", "Z"]:
             h_wave = h["{}_WAVELENGTH".format(band)].read()
 
-            ## new system
-            bins = rebin_wave(h_wave,wave)
-            w = (bins>=0) & (bins<len(wave))
+            bins, w = rebin_wave(h_wave,wave_out)
             h_wave = h_wave[w]
             bins = bins[w]
-
-            ## old system
-            # This should introduce a bias in the redshift estimate: the bin
-            # allocated to a certain pixel is always at a lower redshift than
-            # the pixel was actually at. This will bias the redshift to be too
-            # low. The size of this bias depends on the exact size of the final
-            # bins and the redshift distribution of the lines. This has been
-            # tested by swapping 'floor' for 'ceil', which increased the
-            # redshift bias in the positive direction.
-
-            #w = (np.log10(h_wave)>llmin) & (np.log10(h_wave)<llmax)
-            #h_wave = h_wave[w]
-            #bins = np.ceil((np.log10(h_wave)-llmin)/dll).astype(int)
-            #bins = np.floor((np.log10(wave)-llmin)/dll).astype(int)
 
             # Filter by valid pixels and QSOs.
             fl_aux = h["{}_FLUX".format(band)].read()[:,w]
