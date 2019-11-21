@@ -96,7 +96,7 @@ def line_preds_to_properties(line_preds,line):
         line redshifts, shape: (nspec, )
     '''
 
-    nspec, nboxes = line_preds[0].shape
+    nspec, nboxes = line_preds.shape
     nboxes //= 2
 
     # Construct an interpolator to go from the index along a wave vector to the
