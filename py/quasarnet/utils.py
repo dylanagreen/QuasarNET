@@ -118,13 +118,19 @@ def line_preds_to_properties(line_preds,line):
 
     return c_line, z_line
 
-def get_wave(llmin=np.log10(3600.),llmax=np.log10(10000).,dll=1e-3):
+class Wave:
+    def __init__(self,llmin=np.log10(3600.),llmax=np.log10(10000.),dll=1.e-3):
 
-    nbins = int((llmax-llmin)/dll)
-    wave = 10**(llmin + np.arange(nbins)*dll)
+        self.llmin = llmin
+        self.llmax = llmax
+        self.dll = dll
 
-    return nbins, wave
+        nbins = int((llmax-llmin)/dll)
+        wave_grid = 10**(llmin + np.arange(nbins)*dll)
+        self.nbins = nbins
+        self.wave_grid = wave_grid
 
+        return
 
 # TODO: move this?
 absorber_IGM = {
