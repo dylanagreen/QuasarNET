@@ -101,8 +101,8 @@ def line_preds_to_properties(line_preds,line):
 
     # Construct an interpolator to go from the index along a wave vector to the
     # wavelength associated with this position.
-    nbins,wave = get_wave()
-    i_to_wave = interp1d(arange(len(wave)), wave,
+    wave = Wave()
+    i_to_wave = interp1d(arange(len(wave.wave_grid)), wave.wave_grid,
             bounds_error=False, fill_value='extrapolate')
 
     # Fill in the output array. Done for all spectra at once.
