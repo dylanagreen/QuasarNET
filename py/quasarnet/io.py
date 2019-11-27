@@ -48,16 +48,24 @@ def read_truth(fi):
     class metadata:
         pass
 
+    """
+    # Removed this, instead just read the cols from each file
     cols = ['Z_VI','PLATE',
             'MJD','FIBERID','CLASS_PERSON',
             'Z_CONF_PERSON','BAL_FLAG_VI','BI_CIV']
+    """
 
     truth = {}
 
+    ## Cycle through the files, extracting data from each one.
     for f in fi:
         h = fitsio.FITS(f)
-        tids = h[1]['THING_ID'][:]
-        cols_dict = {c.lower():h[1][c][:] for c in cols}
+        try:
+            tids = h[1]['THING_ID'][:]
+        except ValueError:
+            tids = h[1]['TARGETID'][:]
+        cols = h[1].get_colnames()
+        cols_dict = {c.lower():h[1][c][:] for c in cols if c!='TARGETID'}
         h.close()
         for i,t in enumerate(tids):
             m = metadata()
@@ -102,7 +110,7 @@ def read_data(fi, truth=None, z_lim=2.1, return_pmf=False, nspec=None):
 
     for f in fi:
         print('INFO: reading data from {}'.format(f))
-        h=fitsio.FITS(f)
+        h = fitsio.FITS(f)
         if nspec is None:
             nspec = h[1].get_nrows()
         aux_tids = h[1]['TARGETID'][:nspec].astype(int)
@@ -222,7 +230,7 @@ def read_data(fi, truth=None, z_lim=2.1, return_pmf=False, nspec=None):
     Y[w,3] = 1
 
     ## BAD
-    w = z_conf != 3
+    w = (z_conf != 3)
     Y[w,4] = 1
 
     ## check that all spectra have exactly one classification
@@ -593,7 +601,7 @@ def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13):
 
 
 ## WIP
-def read_desi_sim_truth(fi,f_qsotemp=None,f_baltemp=None):
+def read_desisim_truth(fi,f_qsotemp=None,f_baltemp=None):
     '''
     reads a list of desi truth files and returns a truth dictionary
 
