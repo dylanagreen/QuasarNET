@@ -889,15 +889,17 @@ def rebin_wave(wave_grid_in,wave_out):
 
 # TODO: Make sure that this is up to date.
 # TODO: Integrate with function to read desi truth like 'read_data'
-def read_desi_spectra(fin, ignore_quasar_mask=False, verbose=True):
+def read_desi_spectra(fin, ignore_quasar_mask=False, verbose=True, target_col='DESI_TARGET'):
 
     # Obtain the mask from desitarget if available.
-    try:
-        from desitarget import desi_mask
-        quasar_mask = desi_mask.mask('QSO')
-    except:
-        print("WARN: can't load desi_mask, using hardcoded targetting value!")
-        quasar_mask = 2**2
+    if not ignore_quasar_mask:
+        try:
+            from desitarget import desi_mask
+            quasar_mask = desi_mask.mask('QSO')
+        except:
+            if verbose:
+                print("WARN: can't load desi_mask, using hardcoded targetting value!")
+            quasar_mask = 2**2
 
     if not isinstance(fin,list):
         fin = [fin]
@@ -912,20 +914,26 @@ def read_desi_spectra(fin, ignore_quasar_mask=False, verbose=True):
     for f in fin:
         h = fitsio.FITS(f)
 
-        # Apply the mask.
-        wqso = h[1]['DESI_TARGET'][:] & quasar_mask
+        # If desired, apply the mask.
         if ignore_quasar_mask:
-            wqso |= 1
+            wqso = np.ones_like(h[1][target_col][:])
+        else:
+            wqso = h[1][target_col][:] & quasar_mask
         wqso = (wqso>0)
         nqso_f = wqso.sum()
-        print("INFO: found {} quasar targets".format(nqso_f))
+        if ignore_quasar_mask:
+            if verbose:
+                print("INFO: found {} spectra".format(nqso_f))
+        else:
+            if verbose:
+                print("INFO: found {} quasar target spectra".format(nqso_f))
         tids = h[1]["TARGETID"][:][wqso]
         utids = np.unique(tids)
 
         nspec = len(utids)
         fl = np.zeros((nspec, nbins))
         iv = np.zeros((nspec, nbins))
-        if nspec == 0: return None
+        if nspec == 0: return
         for band in ["B", "R", "Z"]:
             h_wave = h["{}_WAVELENGTH".format(band)].read()
 
@@ -956,8 +964,9 @@ def read_desi_spectra(fin, ignore_quasar_mask=False, verbose=True):
         if f != fin[0]:
             check = np.in1d(utids,global_utids)
             if check.sum() > 0:
-                print('INFO: the following thing_ids are found in multiple files:')
-                print(utids[check])
+                if verbose:
+                    print('INFO: the following thing_ids are found in multiple files:')
+                    print(utids[check])
                 utids = utids[check]
                 fl = fl[check,:]
                 iv = iv[check,:]
@@ -977,7 +986,9 @@ def read_desi_spectra(fin, ignore_quasar_mask=False, verbose=True):
     utids = np.concatenate(utids_list)
     fl = np.hstack((fl,iv))
 
-    print("INFO: found {} good spectra".format(nqso))
+    if verbose:
+        print("INFO: found {} good spectra".format(nqso))
+    
     return utids, fl
 
 # TODO: generalise this to allow for many files to be loaded at once.
