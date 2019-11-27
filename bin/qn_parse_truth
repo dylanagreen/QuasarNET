@@ -17,36 +17,34 @@ parser.add_argument('--out', type=str, help='output file',
 
 args = parser.parse_args()
 
+## Open the superset file and extract the relevant data.
 h = fitsio.FITS(args.sdrq)
-
+cols = []
 colnames = ['THING_ID','Z_VI','PLATE','MJD','FIBERID',\
         'CLASS_PERSON','Z_CONF_PERSON']
-
-cols = []
 for c in colnames:
     cols.append(h[1][c][:])
-
 h.close()
 
+## Open the drq and extract the BAL data.
+## Rearrange it into a tid: (flag,bi) dictionary.
 h = fitsio.FITS(args.drq)
 tids = h[1]['THING_ID'][:]
 bal_flag_vi_drq = h[1]['BAL_FLAG_VI'][:]
 bi_civ_drq = h[1]['BI_CIV'][:]
 h.close()
-
 drq = {t:(bfv,bi) for t,bfv,bi in zip(tids,bal_flag_vi_drq,bi_civ_drq)}
 
+## Insert the BAL data into arrays to lie alongside the superset data.
 w = np.in1d(cols[0], tids)
-
 bal_flag_vi = np.zeros(len(cols[0]))
 bal_flag_vi[w] = np.array([drq[t][0] for t in cols[0][w]])
-
 bi_civ = np.zeros(len(cols[0]))
 bi_civ[w] = np.array([drq[t][1] for t in cols[0][w]])
-
 cols += [bal_flag_vi, bi_civ]
 colnames += ['BAL_FLAG_VI', 'BI_CIV']
 
+## Write the output truth file.
 h = fitsio.FITS(args.out, 'rw', clobber=True)
 h.write(cols, names=colnames)
 h.close()

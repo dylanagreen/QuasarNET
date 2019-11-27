@@ -1,0 +1,80 @@
+#!/usr/bin/env python
+
+import numpy as np
+import fitsio
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--truth', type=str, required=True,
+        help='truth file')
+
+parser.add_argument('--targets', type=str, required=True,
+        help='targets file')
+
+parser.add_argument('--bal-templates', type=str, required=True,
+        help='BAL templates file')
+
+parser.add_argument('--out', type=str, required=True,
+        help='output file')
+
+args = parser.parse_args()
+
+## Try to load the DESI quasar mask.
+## Otherwise use a hardcoded value (with warning).
+try:
+    from desitarget import desi_mask
+    quasar_mask = desi_mask.mask('QSO')
+except:
+    print("WARN: can't load desi_mask, using hardcoded targetting value!")
+    quasar_mask = 2**2
+
+## Open the truth file and extract the relevant data.
+h = fitsio.FITS(args.truth)
+cols_tr = []
+colnames = ['TARGETID','TRUEZ','TRUESPECTYPE']
+for c in colnames:
+    cols_tr.append(h['TRUTH'][c][:])
+h.close()
+
+## Open the targets file and extract the relevant data.
+h = fitsio.FITS(args.targets)
+cols_ta = []
+colnames = ['TARGETID','SV1_DESI_TARGET']
+for c in colnames:
+    cols_ta.append(h[1][c][:])
+h.close()
+
+## Filter to only include QSO targets.
+w_ta = (cols_ta[1] & quasar_mask)>0
+w = np.in1d(cols_tr[0],cols_ta[0][w_ta])
+for c in cols_tr:
+    c = c[w]
+
+## Open the drq and extract the BAL data.
+## Rearrange it into a tid: (flag,bi) dictionary.
+h = fitsio.FITS(args.truth)
+tids = h['TRUTH_QSO']['TARGETID'][:]
+bal_templateid = h['TRUTH_QSO']['BAL_TEMPLATEID'][:]
+h.close()
+h = fitsio.FITS(args.bal_templates)
+bi_civ_templates = h['METADATA']['BI_CIV'][:]
+h.close()
+w = (bal_templateid>=0)
+bi_civ = bi_civ_templates[bal_templateid[w]]
+tids = tids[w]
+bal_data = {t:(1,bi) for t,bi in zip(tids,bi_civ)}
+
+## Insert the BAL data into arrays to lie alongside the superset data.
+w = np.in1d(cols_tr[0], tids)
+bal_flag = np.zeros(len(cols_tr[0]))
+bal_flag[w] = np.array([bal_data[t][0] for t in cols_tr[0][w]])
+bi_civ = np.zeros(len(cols_tr[0]))
+bi_civ[w] = np.array([bal_data[t][1] for t in cols_tr[0][w]])
+cols += [bal_flag, bi_civ]
+colnames += ['BAL_FLAG', 'BI_CIV']
+
+## Write the output truth file.
+h = fitsio.FITS(args.out, 'rw', clobber=True)
+h.write(cols, names=colnames)
+h.close()
