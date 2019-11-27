@@ -1,0 +1,47 @@
+#!/usr/bin/env python
+
+import numpy as np
+from quasarnet import io
+import fitsio
+import sys
+
+import argparse
+
+parser=argparse.ArgumentParser()
+
+parser.add_argument('--data',type=str, required=True,
+        help='input data file')
+
+parser.add_argument('--nsplits',type=int, required=True,
+        help='number of splits')
+
+parser.add_argument('--training-proportion',type=float, required=False, default=None,
+        help='for each split, proportion to use for training')
+
+parser.add_argument('--seed',type=int, required=True, default=0,
+        help='number of splits')
+
+parser.add_argument('--out-prefix',type=str, required=True,
+        help='output file prefix')
+
+args=parser.parse_args()
+
+## Is this necessary?
+if not args.training_proportion:
+    args.training_proportion = 0.9
+
+## Get the number of spectra in the data file.
+h = fitsio.FITS(args.data)
+nspec = h[0].get_dims()[0]
+
+## For each split number, determine the
+state = np.random.RandomState(seed=args.seed)
+for i in range(args.nsplits):
+    w = (state.uniform(size=nspec)<args.training_proportion)
+
+    ## Write the output to a fits file, with flux/iv in the primary HDU, and a
+    ## catalog of objects in the 1st extension.
+    h_split = fitsio.FITS(args.out,'rw',clobber=True)
+    h_split.write(h[0][:,:][w,:])
+    h_split.write(h[0][:][w])
+    h_split.close()
