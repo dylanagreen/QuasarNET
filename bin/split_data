@@ -15,7 +15,7 @@ parser.add_argument('--data',type=str, required=True,
 parser.add_argument('--nsplits',type=int, required=True,
         help='number of splits')
 
-parser.add_argument('--training-proportion',type=float, required=False, default=None,
+parser.add_argument('--training-proportion',type=float, required=False, default=0.9,
         help='for each split, proportion to use for training')
 
 parser.add_argument('--seed',type=int, required=True, default=0,
@@ -25,10 +25,6 @@ parser.add_argument('--out-prefix',type=str, required=True,
         help='output file prefix')
 
 args=parser.parse_args()
-
-## Is this necessary?
-if not args.training_proportion:
-    args.training_proportion = 0.9
 
 ## Get the number of spectra in the data file.
 h = fitsio.FITS(args.data)
@@ -41,7 +37,7 @@ for i in range(args.nsplits):
 
     ## Write the output to a fits file, with flux/iv in the primary HDU, and a
     ## catalog of objects in the 1st extension.
-    h_split = fitsio.FITS(args.out,'rw',clobber=True)
+    h_split = fitsio.FITS(args.out_prefix+'_{}.fits'.format(i),'rw',clobber=True)
     h_split.write(h[0][:,:][w,:])
     h_split.write(h[0][:][w])
     h_split.close()
