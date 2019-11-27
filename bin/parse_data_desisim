@@ -9,25 +9,16 @@ import argparse
 
 parser=argparse.ArgumentParser()
 
-parser.add_argument('--spectra',type=str, nargs='+', required=True)
+parser.add_argument('--spectra',type=str, nargs='+', required=True,
         help='list of spectra files')
 
-parser.add_argument('--sdrq',type=str, required=False, default=None)
+parser.add_argument('--sdrq',type=str, required=False, default=None,
         help='superset file')
 
-parser.add_argument('--out',type=str, required=True)
+parser.add_argument('--out',type=str, required=True,
         help='output file')
 
 args=parser.parse_args()
-
-## Try to load the DESI quasar mask.
-## Otherwise use a hardcoded value (with warning).
-try:
-    from desitarget import desi_mask
-    quasar_mask = desi_mask.mask('QSO')
-except:
-    print("WARN: can't load desi_mask, using hardcoded targetting value!")
-    quasar_mask = 2**2
 
 """## If we have an sdrq, filter the tids from spall by those in sdrq.
 if args.sdrq is not None:
@@ -41,18 +32,23 @@ fl = []
 tids = []
 nread = 0
 for i,f in enumerate(args.spectra):
-    tids_f, fl_f = io.read_desi_spectra(f)
-    tids.append(tids_f)
-    fl.append(fl_f)
-    print('INFO: read {:4d}/{:4d} files ({:.2%})'.format(i+1,len(args.spectra),(i+1)/len(args.spectra)))
+    aux = io.read_desi_spectra(f,verbose=False,target_col='SV1_DESI_TARGET')
+    if aux is not None:
+        tids.append(aux[0])
+        fl.append(aux[1])
+    print('INFO: read {:4d}/{:4d} files ({:.2%})'.format(i+1,len(args.spectra),(i+1)/len(args.spectra)),end='\r')
+print('')
 
 # Concatenate all results to form single arrays.
-tids = np.concatenate(tids)
-fl = np.concatenate(fl)
+if len(tids)>0:
+    tids = np.concatenate(tids)
+    fl = np.concatenate(fl)
 
-## Write the output to a fits file, with flux/iv in the primary HDU, and a
-## catalog of objects in the 1st extension.
-h = fitsio.FITS(args.out,'rw',clobber=True)
-h.write(fl)
-h.write([tids], names=['TARGETID'])
-h.close()
+    ## Write the output to a fits file, with flux/iv in the primary HDU, and a
+    ## catalog of objects in the 1st extension.
+    h = fitsio.FITS(args.out,'rw',clobber=True)
+    h.write(fl)
+    h.write([tids], names=['TARGETID'])
+    h.close()
+else:
+    print('WARN: no quasar targets found in spectra files. Exiting.')

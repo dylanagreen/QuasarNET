@@ -18,7 +18,7 @@ parser.add_argument('--nsplits',type=int, required=True,
 parser.add_argument('--training-proportion',type=float, required=False, default=0.9,
         help='for each split, proportion to use for training')
 
-parser.add_argument('--seed',type=int, required=True, default=0,
+parser.add_argument('--seed',type=int, required=False, default=0,
         help='number of splits')
 
 parser.add_argument('--out-prefix',type=str, required=True,
@@ -39,5 +39,5 @@ for i in range(args.nsplits):
     ## catalog of objects in the 1st extension.
     h_split = fitsio.FITS(args.out_prefix+'_{}.fits'.format(i),'rw',clobber=True)
     h_split.write(h[0][:,:][w,:])
-    h_split.write(h[0][:][w])
+    h_split.write(h[1][:][w])
     h_split.close()

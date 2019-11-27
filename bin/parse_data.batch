@@ -5,4 +5,4 @@
 #SBATCH -L SCRATCH   #Job requires $SCRATCH file system
 #SBATCH -C haswell   #Use Haswell nodes
 
-srun -n 1 -c 64 parse_data --spplates ~/dr14/eboss/spectro/redux/v5_10_0/*/spPlate* --spall /global/projecta/projectdirs/sdss/data/sdss/dr12/boss/spectro/redux/spAll-DR12.fits --out data/data_dr12_v5_10_0.fits
+srun -n 1 -c 64 parse_data --spplates /global/homes/n/nbusca/dr14/eboss/spectro/redux/v5_10_0/*/spPlate* --spall /global/projecta/projectdirs/sdss/data/sdss/dr12/boss/spectro/redux/spAll-DR12.fits --out data/data_dr12_jaf.fits

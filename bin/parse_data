@@ -56,6 +56,9 @@ else:
     print('INFO: found {} quasar targets'.format(wqso.sum()))
 
     # Impose that the plate_quality must be 'good'
+    #wqso &= (plate_quality == 'good')
+    # This doesn't seem to worrk any more for some reason.
+    print(plate_quality[:5])
     wqso &= plate_quality == b'good'
     print('INFO: after rejecting BAD plates, {} remain'.format(wqso.sum()))
 
@@ -64,8 +67,8 @@ else:
 ## Construct a dictionary describing the fiberids that were used in each
 ## (plate,mjd) pair for objects in our spall file.
 plate_mjd = {}
-for i,(p,m,f) in enumerate(pmf_spall)[wqso]:
-    sys.stderr.write('\rINFO: populating dict: {}'.format(i*100/len(pmf_spall)))
+for i,(p,m,f) in enumerate(np.array(pmf_spall)[wqso]):
+    sys.stderr.write('\rINFO: populating dict: {:.1%}'.format(i/len(pmf_spall)))
     k = (p,m)
     if not k in plate_mjd:
         plate_mjd[k] = []
@@ -88,9 +91,12 @@ for p,m in plate_mjd:
     if len(f)==0:
         print('WARNING: file {} not found'.format(fname))
         print('WARNING: args is {} '.format(args.spplates[0]))
-        sys.exit(1)
+        print('WARNING: ignoring file')
+        continue
+        #sys.exit(1)
     if len(f)>1:
         print('WARNING: multiple files found', f)
+        print('WARNING: exiting')
         sys.exit(1)
 
     # Read the spPlate file found, using the list of relevant fibers from the

@@ -114,7 +114,7 @@ def line_preds_to_properties(line_preds,line):
     offset = line_preds[arange(nspec, dtype=int), nboxes+j]
     ## Put the confidence and redshift for the line into the output array.
     c_line = line_preds[:,:nboxes].max(axis=1)
-    z_line = i_to_wave((j+offset)*len(wave)/nboxes)/l - 1
+    z_line = i_to_wave((j+offset)*len(wave.wave_grid)/nboxes)/l - 1
 
     return c_line, z_line
 

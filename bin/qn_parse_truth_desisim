@@ -32,16 +32,16 @@ except:
 ## Open the truth file and extract the relevant data.
 h = fitsio.FITS(args.truth)
 cols_tr = []
-colnames = ['TARGETID','TRUEZ','TRUESPECTYPE']
-for c in colnames:
+colnames_tr = ['TARGETID','TRUEZ','TRUESPECTYPE']
+for c in colnames_tr:
     cols_tr.append(h['TRUTH'][c][:])
 h.close()
 
 ## Open the targets file and extract the relevant data.
 h = fitsio.FITS(args.targets)
 cols_ta = []
-colnames = ['TARGETID','SV1_DESI_TARGET']
-for c in colnames:
+colnames_ta = ['TARGETID','SV1_DESI_TARGET']
+for c in colnames_ta:
     cols_ta.append(h[1][c][:])
 h.close()
 
@@ -71,10 +71,10 @@ bal_flag = np.zeros(len(cols_tr[0]))
 bal_flag[w] = np.array([bal_data[t][0] for t in cols_tr[0][w]])
 bi_civ = np.zeros(len(cols_tr[0]))
 bi_civ[w] = np.array([bal_data[t][1] for t in cols_tr[0][w]])
-cols += [bal_flag, bi_civ]
-colnames += ['BAL_FLAG', 'BI_CIV']
+cols_tr += [bal_flag, bi_civ]
+colnames_tr += ['BAL_FLAG', 'BI_CIV']
 
 ## Write the output truth file.
 h = fitsio.FITS(args.out, 'rw', clobber=True)
-h.write(cols, names=colnames)
+h.write(cols_tr, names=colnames_tr)
 h.close()
