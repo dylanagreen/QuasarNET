@@ -132,6 +132,22 @@ class Wave:
 
         return
 
+def rebin_wave(wave_grid_in,wave_out):
+
+    # Potential new system.
+    #wave_grid_out = wave_out.wave_grid
+    #wave_edges = np.concatenate(([wave_grid_out[0]-(wave_grid_out[1]-wave_grid_out[0])/2],(wave_grid_out[1:]+wave_grid_out[:-1])/2,[wave_grid_out[-1]+(wave_grid_out[-1]-wave_grid_out[-2])/2]))
+    #bins = np.searchsorted(wave_edges,wave_grid_in)-1
+
+    # Old system:
+    # This system treats the output wave grid as the lower bounds of the bins.
+    # It is implemented consistently and so does not introduce a bias as a
+    # result of the floor function.
+    bins = np.floor((np.log10(wave_grid_in)-wave_out.llmin)/wave_out.dll).astype(int)
+    w = (bins>=0) & (bins<wave_out.nbins)
+
+    return bins, w
+
 def get_tid_field(mode):
 
     tid_field = {}
