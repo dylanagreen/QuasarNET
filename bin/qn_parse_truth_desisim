@@ -37,7 +37,7 @@ except:
 
 ## Open the truth and targeting files and extract the relevant data.
 cols_tr, colnames_tr = io.read_truth_desisim(args.truth)
-cols_ta, colnames_ta = io.read_targets_desisim(args.targets)
+cols_ta, colnames_ta = io.read_targets_desisim(args.targets,args.targeting_bits)
 
 ## Filter to only include QSO targets.
 w_ta = (cols_ta[1] & quasar_mask)>0
@@ -50,7 +50,7 @@ for c in cols_tr:
 bal_data = io.read_bal_data_desisim(args.truth,args.bal_templates)
 
 ## Insert the BAL data into arrays to lie alongside the superset data.
-w = np.in1d(cols_tr[0], tids)
+w = np.in1d(cols_tr[0], np.array(list(bal_data.keys())))
 bal_flag = np.zeros(len(cols_tr[0]))
 bal_flag[w] = np.array([bal_data[t][0] for t in cols_tr[0][w]])
 bi_civ = np.zeros(len(cols_tr[0]))

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
 import numpy as np
-from quasarnet import io
 import fitsio
 import sys
-
 import argparse
+
+from quasarnet import io, utils
 
 parser=argparse.ArgumentParser()
 
@@ -14,6 +14,10 @@ parser.add_argument('--spectra',type=str, nargs='+', required=True,
 
 parser.add_argument('--sdrq',type=str, required=False, default=None,
         help='superset file')
+
+parser.add_argument('--targeting-bits',type=str, required=True,
+        choices=['DESI_TARGET','SV1_DESI_TARGET'],
+        help='which targeting bits to use')
 
 parser.add_argument('--out',type=str, required=True,
         help='output file')
@@ -24,11 +28,11 @@ args=parser.parse_args()
 fl = []
 tids = []
 nread = 0
-aux = io.read_desi_spectra(args.spectra,verbose=False,target_col='SV1_DESI_TARGET')
+aux = io.read_desi_spectra_list(args.spectra,verbose=False,targeting_bits=args.targeting_bits)
 if aux:
     tids, spid0, spid1, spid2, fliv = aux
 else:
-    raise('WARN: No spectra found; exiting.')
+    raise Exception('WARN: No spectra found; exiting.')
 
 ## If we have an sdrq, filter the tids by those in sdrq.
 if args.sdrq is not None:
@@ -45,11 +49,15 @@ if args.sdrq is not None:
     print('INFO: done.')
 
 ## Define the spid components in a header.
-head = utils.get_spectrum_id_fields('DESISIM')
+spid_fields= utils.get_spectrum_id_fields('DESISIM')
+head = []
+for i,k in enumerate(list(spid_fields.keys())):
+    head += [{'name':k, 'value':spid_fields[k],
+                'comment':'Spectrum identifier field {}'.format(i)}]
 
-## Write the output to a fits file, with flux/iv in the primary HDU, and a
+    ## Write the output to a fits file, with flux/iv in the primary HDU, and a
 ## catalog of objects in the 1st extension.
 h = fitsio.FITS(args.out,'rw',clobber=True)
 h.write(fliv)
-h.write([tids,spid0,spid1,spid2], names=['TARGETID','SPID0','SPID1','SPID2'], head=head)
+h.write([tids,spid0,spid1,spid2], names=['TARGETID','SPID0','SPID1','SPID2'], header=head)
 h.close()

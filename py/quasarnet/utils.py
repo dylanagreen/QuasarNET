@@ -158,7 +158,7 @@ def get_tid_field(mode):
     elif mode == 'DESI':
         tid_field['TARGETID'] = 'TARGETID'
 
-    elif mode == 'DESI':
+    elif mode == 'DESISIM':
         tid_field['TARGETID'] = 'TARGETID'
 
     return tid_field
@@ -177,7 +177,7 @@ def get_spectrum_id_fields(mode):
         spid_fields['SPID1'] = 'NIGHT'
         spid_fields['SPID2'] = 'FIBER'
 
-    elif mode == 'DESI':
+    elif mode == 'DESISIM':
         spid_fields['SPID0'] = 'TILEID'
         spid_fields['SPID1'] = 'NIGHT'
         spid_fields['SPID2'] = 'FIBER'

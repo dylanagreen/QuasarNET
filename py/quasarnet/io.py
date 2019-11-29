@@ -289,8 +289,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, targetin
     fl_list = []
     iv_list = []
     nspec = 0
-
-    wave_out = utils.Wave()
+    global_tids = []
 
     for i,f in enumerate(fin):
 
@@ -313,8 +312,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, targetin
                     spid2 = spid2[check]
                     fl = fl[check,:]
                     iv = iv[check,:]
-                    nspec_f = check.sum()
-
+            
             # Add the flux and iv arrays for this file to a list.
             tids_list += [tids]
             spid0_list += [spid0]
@@ -322,7 +320,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, targetin
             spid2_list += [spid2]
             fl_list += [fl]
             iv_list += [iv]
-            nspec += nspec_f
+            nspec += len(tids)
             global_tids = np.concatenate(tids_list)
 
         else:
@@ -352,13 +350,16 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, targetin
 
 def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'):
 
-    tid_field = get_tid_field('DESI')
-    spid_fields = get_spectrum_id_fields('DESI')
+    tid_field = utils.get_tid_field('DESI')
+    spid_fields = utils.get_spectrum_id_fields('DESI')
 
     h = fitsio.FITS(f)
 
-    wqso = ((h[1][target_col][:] & quasar_mask)>0)
-    nqso_f = wqso.sum()
+    wqso = ((h[1][targeting_bits][:] & quasar_mask)>0)
+    
+    nspec_init = wqso.sum()
+    if nspec_init == 0: return None
+    
     if verbose:
         print("INFO: found {} target spectra".format(nqso_f))
 
@@ -369,7 +370,7 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'
 
     ## Here, we determine what to do with spectra that duplicate in some way.
     met = [(t,s0,s1,s2) for t,s0,s1,s2 in zip(tids,spid0,spid1,spid2)]
-    umet = np.unique(ts,axis=0)
+    umet = [tuple(x) for x in np.unique(met,axis=0)]
 
     ## Remove any entries with duplicated metadata.
     w = np.zeros(tids.shape).astype('bool')
@@ -392,6 +393,8 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'
     iv = np.zeros((nspec, nbins))
 
     if nspec == 0: return None
+
+    wave_out = utils.Wave()
 
     for band in ["B", "R", "Z"]:
         h_wave = h["{}_WAVELENGTH".format(band)].read()
@@ -439,13 +442,13 @@ def read_bal_data_desisim(truth,bal_templates):
 
     ## Open the truth file, extract the templateid corresponding to each
     ## targetid.
-    h = fitsio.FITS(args.truth)
+    h = fitsio.FITS(truth)
     tids = h['TRUTH_QSO']['TARGETID'][:]
     bal_templateid = h['TRUTH_QSO']['BAL_TEMPLATEID'][:]
     h.close()
 
     ## Open the templates file, extract the bi_civ for each templateid.
-    h = fitsio.FITS(args.bal_templates)
+    h = fitsio.FITS(bal_templates)
     bi_civ_templates = h['METADATA']['BI_CIV'][:]
     h.close()
 
@@ -482,7 +485,7 @@ def read_targets_desisim(targets,targeting_bits):
     h = fitsio.FITS(targets)
 
     colnames = [tid_field['TARGETID']]
-    cols = [h[1][tid_field['TARGETID']][:]
+    cols = [h[1][tid_field['TARGETID']][:]]
 
     colnames += [targeting_bits]
     cols += [h[1][targeting_bits][:]]
@@ -745,7 +748,7 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, mode='BO
 
     if return_spid:
         spid0 = spid0[observed]
-        spid1 = spid1[observed
+        spid1 = spid1[observed]
         spid2 = spid2[observed]
 
     ## fill redshifts
