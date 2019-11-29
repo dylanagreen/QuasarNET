@@ -39,5 +39,5 @@ for i in range(args.nsplits):
     ## catalog of objects in the 1st extension.
     h_split = fitsio.FITS(args.out_prefix+'_{}.fits'.format(i),'rw',clobber=True)
     h_split.write(h[0][:,:][w,:])
-    h_split.write(h[1][:][w])
+    h_split.write(h[1][:][w],header=h[1].read_header())
     h_split.close()
