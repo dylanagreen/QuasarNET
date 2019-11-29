@@ -14,15 +14,6 @@ parser.add_argument('--out',type=str, required=True,
 
 args=parser.parse_args()
 
-## Try to load the DESI quasar mask.
-## Otherwise use a hardcoded value (with warning).
-try:
-    from desitarget import desi_mask
-    quasar_mask = desi_mask.mask('QSO')
-except:
-    print("WARN: can't load desi_mask, using hardcoded targetting value!")
-    quasar_mask = 2**2
-
 ## Cycle through the spectra files, exctracting data from each one.
 cols = ['TARGETID', 'NIGHT', 'EXPID', 'FIBER', 'TILEID',
         'DESI_TARGET', 'SV1_DESI_TARGET', 'FIBERSTATUS']
@@ -33,7 +24,7 @@ nread = 0
 for i,f in enumerate(args.spectra):
     h = fitsio.FITS(f)
     for col in cols:
-        data[col].append(h[1][col[:]])
+        data[col].append(h[1][col][:])
     print('INFO: read {:4d}/{:4d} files ({:.2%})'.format(i+1,len(args.spectra),(i+1)/len(args.spectra)),end='\r')
 print('')
 
