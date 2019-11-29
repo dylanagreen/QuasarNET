@@ -132,6 +132,81 @@ class Wave:
 
         return
 
+def get_tid_field(mode):
+
+    tid_field = {}
+
+    if mode == 'BOSS':
+        tid_field['TARGETID'] = 'THING_ID'
+
+    elif mode == 'DESI':
+        tid_field['TARGETID'] = 'TARGETID'
+
+    elif mode == 'DESI':
+        tid_field['TARGETID'] = 'TARGETID'
+
+    return tid_field
+
+def get_spectrum_id_fields(mode):
+
+    spid_fields = {}
+
+    if mode == 'BOSS':
+        spid_fields['SPID0'] = 'PLATE'
+        spid_fields['SPID1'] = 'MJD'
+        spid_fields['SPID2'] = 'FIBERID'
+
+    elif mode == 'DESI':
+        spid_fields['SPID0'] = 'TILEID'
+        spid_fields['SPID1'] = 'NIGHT'
+        spid_fields['SPID2'] = 'FIBER'
+
+    elif mode == 'DESI':
+        spid_fields['SPID0'] = 'TILEID'
+        spid_fields['SPID1'] = 'NIGHT'
+        spid_fields['SPID2'] = 'FIBER'
+
+    return spid_fields
+
+def get_truth_fields(mode):
+
+    truth_fields = {}
+
+    if mode == 'BOSS':
+        truth_fields['Z'] =         'Z_VI'
+        truth_fields['OBJCLASS'] =  'CLASS_PERSON'
+        truth_fields['Z_CONF'] =    'Z_CONF_PERSON'
+
+    elif mode == 'DESI':
+        truth_fields['Z'] =         'Z_VI'
+        truth_fields['OBJCLASS'] =  'CLASS_PERSON'
+        truth_fields['Z_CONF'] =    'Z_CONF_PERSON'
+
+    elif mode == 'DESISIM':
+        truth_fields['Z'] =         'TRUEZ'
+        truth_fields['OBJCLASS'] =  'TRUESPECTYPE'
+
+    return truth_fields
+
+def get_bal_fields(mode):
+
+    truth_fields = {}
+
+    if mode == 'BOSS':
+        truth_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
+        truth_fields['BI_CIV'] =   'BI_CIV'
+
+    elif mode == 'DESI':
+        truth_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
+        truth_fields['BI_CIV'] =   'BI_CIV'
+
+    elif mode == 'DESISIM':
+        truth_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
+        truth_fields['BI_CIV'] =   'BI_CIV'
+
+    return truth_fields
+
+
 # TODO: move this?
 absorber_IGM = {
     'Halpha'      : 6562.8,
