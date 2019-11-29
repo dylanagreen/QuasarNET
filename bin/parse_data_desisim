@@ -50,7 +50,7 @@ if args.sdrq is not None:
 
 ## Define the spid components in a header.
 spid_fields= utils.get_spectrum_id_fields('DESISIM')
-head = []
+head = [{'name':'MODE', 'value':'DESISIM'}]]
 for i,k in enumerate(list(spid_fields.keys())):
     head += [{'name':k, 'value':spid_fields[k],
                 'comment':'Spectrum identifier field {}'.format(i)}]
