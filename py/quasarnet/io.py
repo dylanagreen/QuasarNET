@@ -467,7 +467,7 @@ def read_truth_desisim(truth):
     h = fitsio.FITS(truth)
 
     colnames = [tid_field['TARGETID']]
-    cols = [h[1][tid_field['TARGETID']][:]
+    cols = [h[1][tid_field['TARGETID']][:]]
 
     for k in truth_fields.keys():
         colnames += [k]
