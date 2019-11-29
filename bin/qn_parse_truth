@@ -4,6 +4,8 @@ import numpy as np
 import fitsio
 import argparse
 
+from quasarnet import io
+
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--sdrq', type=str, help='Superset_DRQ file',
@@ -15,21 +17,17 @@ parser.add_argument('--drq', type=str, help='DRQ file',
 parser.add_argument('--out', type=str, help='output file',
         required=True)
 
+parser.add_argument('--mode', type=str, help='mode for file format',
+        required=True, choices=['BOSS','DESI','DESISIM'])
+
 args = parser.parse_args()
 
-## Open the superset file and extract the relevant data.
-h = fitsio.FITS(args.sdrq)
-cols = []
-colnames = ['THING_ID','Z_VI','PLATE','MJD','FIBERID',\
-        'CLASS_PERSON','Z_CONF_PERSON']
-for c in colnames:
-    cols.append(h[1][c][:])
-h.close()
+tid2truth, spid2tid, cols, colnames = io.read_sdrq(args.sdrq,mode=args.mode)
 
 ## Open the drq and extract the BAL data.
 ## Rearrange it into a tid: (flag,bi) dictionary.
 h = fitsio.FITS(args.drq)
-tids = h[1]['THING_ID'][:]
+tids = h[1][tid_field['TARGETID']][:]
 bal_flag_vi_drq = h[1]['BAL_FLAG_VI'][:]
 bi_civ_drq = h[1]['BI_CIV'][:]
 h.close()

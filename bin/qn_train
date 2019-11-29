@@ -18,45 +18,51 @@ parser.add_argument("-l","--lines", type = str,
         required=False, default = ["LYA"], nargs="*")
 parser.add_argument("-b","--lines-bal", type = str,
         required=False, default = ["CIV(1548)"], nargs="*")
-parser.add_argument("--decay", type = float, required=False, 
+parser.add_argument("--decay", type = float, required=False,
         default = 0.)
 
 args = parser.parse_args()
 
+## Load the training data and the truth table.
 truth = io.read_truth(args.truth)
 tids,X,Y,z,bal = io.read_data(args.data, truth)
 
+## Set up the model.
 model = QuasarNET(
-        X[0,:,None].shape, 
+        X[0,:,None].shape,
         nlines=len(args.lines)+len(args.lines_bal)
         )
 
+## Construct the loss function for each line.
 loss = []
 for i in args.lines:
     loss.append(custom_loss)
-
 for i in args.lines_bal:
     loss.append(custom_loss)
 
+## Set up the minimisation procedure.
 adam = Adam(decay=args.decay)
 model.compile(optimizer=adam, loss=loss, metrics=[])
 
-box, sample_weight = io.objective(z,Y,bal,lines=args.lines, 
+## Construct the objective for the training data.
+box, sample_weight = io.objective(z,Y,bal,lines=args.lines,
         lines_bal=args.lines_bal)
 
+## Fit the model using specified hyper-parameters.
 print( "starting fit")
 history = model.fit(X[:,:,None], box,
         epochs = args.epochs,
         batch_size = 256,
         sample_weight = sample_weight)
 
+## Save the fitted model and printa a summary.
 model.save(args.out_prefix+".h5")
 model.summary()
 
+## Write a hist fits file?
 cols = []
 fout = fitsio.FITS(args.out_prefix+"_hist.fits",'rw',clobber=True)
 for v in history.history.values():
     cols.append(np.array(v))
-
 fout.write(cols, names=list(history.history.keys()))
 fout.close()
