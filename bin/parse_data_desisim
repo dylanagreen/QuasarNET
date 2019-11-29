@@ -20,35 +20,36 @@ parser.add_argument('--out',type=str, required=True,
 
 args=parser.parse_args()
 
-"""## If we have an sdrq, filter the tids from spall by those in sdrq.
-if args.sdrq is not None:
-    print('INFO: reading sdrq')
-    sdrq = fitsio.FITS(args.sdrq)
-    tids_sdrq = sdrq[1]['TARGETID'][:]
-    print('INFO: done')"""
-
 ## Cycle through the spectra files, exctracting data from each one.
 fl = []
 tids = []
 nread = 0
-for i,f in enumerate(args.spectra):
-    aux = io.read_desi_spectra(f,verbose=False,target_col='SV1_DESI_TARGET')
-    if aux is not None:
-        tids.append(aux[0])
-        fl.append(aux[1])
-    print('INFO: read {:4d}/{:4d} files ({:.2%})'.format(i+1,len(args.spectra),(i+1)/len(args.spectra)),end='\r')
-print('')
-
-# Concatenate all results to form single arrays.
-if len(tids)>0:
-    tids = np.concatenate(tids)
-    fl = np.concatenate(fl)
-
-    ## Write the output to a fits file, with flux/iv in the primary HDU, and a
-    ## catalog of objects in the 1st extension.
-    h = fitsio.FITS(args.out,'rw',clobber=True)
-    h.write(fl)
-    h.write([tids], names=['TARGETID'])
-    h.close()
+aux = io.read_desi_spectra(args.spectra,verbose=False,target_col='SV1_DESI_TARGET')
+if aux:
+    tids, spid0, spid1, spid2, fliv = aux
 else:
-    print('WARN: no quasar targets found in spectra files. Exiting.')
+    raise('WARN: No spectra found; exiting.')
+
+## If we have an sdrq, filter the tids by those in sdrq.
+if args.sdrq is not None:
+    print('INFO: reading sdrq, including only spectra with targetid in sdrq.')
+    sdrq = fitsio.FITS(args.sdrq)
+    tids_sdrq = sdrq[1]['TARGETID'][:]
+    sdrq.close()
+    w = np.in1d(tids,tids_sdrq)
+    tids = tids[w]
+    spid0 = spid0[w]
+    spid1 = spid1[w]
+    spid2 = spid2[w]
+    fliv = fliv[w,:]
+    print('INFO: done.')
+
+## Define the spid components in a header.
+head = utils.get_spectrum_id_fields('DESISIM')
+
+## Write the output to a fits file, with flux/iv in the primary HDU, and a
+## catalog of objects in the 1st extension.
+h = fitsio.FITS(args.out,'rw',clobber=True)
+h.write(fliv)
+h.write([tids,spid0,spid1,spid2], names=['TARGETID','SPID0','SPID1','SPID2'], head=head)
+h.close()
