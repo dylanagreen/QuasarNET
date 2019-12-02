@@ -52,6 +52,9 @@ def read_sdrq(sdrq, mode='BOSS'):
 
     sdrq.close()
 
+    objclass_codes = codify_objclass(data['OBJCLASS'],mode)
+    data['OBJCLASS'] = objclass_codes
+
     ## Construct dictionaries {targetid: class, z_conf, z}, and
     ## {(spid0, spid1, spid2): targetid}.
     t2t_data = zip(data['TARGETID'],data['OBJCLASS'],data['Z_CONF'],data['Z'])
@@ -468,6 +471,9 @@ def read_truth_desisim(truth):
     for k in truth_fields.keys():
         tr_dict[k] = h[1][truth_fields[k]][:]
 
+    objclass_codes = codify_objclass(tr_dict['OBJCLASS'],'DESISIM')
+    tr_dict['OBJCLASS'] = objclass_codes
+
     h.close()
 
     return tr_dict
@@ -485,6 +491,22 @@ def read_targets_desisim(targets,targeting_bits):
     h.close()
 
     return ta_dict
+
+def codify_objclass(objclass,mode):
+
+    ## Get a dictionary mapping the coded classes to a list of the native class
+    ## names included in that class.
+    cc_dict = get_class_codes(mode)
+
+    ## For each class code, find which objects have native class names that fall
+    ## into its class.
+    objclass_codes = np.zeros(objclass.shape)
+    for k in cc_dict.keys():
+        w = [objclass==classname for classname in cc_dict[k]]
+        w = np.any(w,axis=0)
+        objclass_codes[w] = k
+
+    return objclass_codes
 
 ## ??
 def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
@@ -568,7 +590,7 @@ def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
 ################################################################################
 ## Read data after parsing.
 
-def read_truth(fi, mode='BOSS'):
+def read_truth(fi):
     '''
     reads a list of truth files and returns a truth dictionary
 
@@ -590,9 +612,7 @@ def read_truth(fi, mode='BOSS'):
             'Z_CONF_PERSON','BAL_FLAG_VI','BI_CIV']
     """
 
-    tid_field = utils.get_tid_field(mode)
-    truth_fields = utils.get_truth_fields(mode)
-    bal_fields = utils.get_bal_fields(mode)
+    cols = list(utils.get_truth_fields().keys()) + list(utils.get_bal_fields().keys())
 
     truth = {}
 
@@ -600,10 +620,11 @@ def read_truth(fi, mode='BOSS'):
     for f in fi:
         # Open the file and get the tids.
         h = fitsio.FITS(f)
-        tids = h[1][tid_field['TARGETID']][:]
+        tids = h[1]['TARGETID'][:]
         # Cycle through each tid.
         for i,t in enumerate(tids):
             m = metadata()
+            """
             # For each of the important field groups:
             for fd in [truth_fields,bal_fields]:
                 # For each key:
@@ -611,12 +632,15 @@ def read_truth(fi, mode='BOSS'):
                     # Get the data from the column corresponding to that key's
                     # corresponding value, and add it to the metadata.
                     setattr(m,k,h[1][k][i])
+            """
+            for c in cols:
+                setattr(m,c,h[1][c][i])
             truth[t] = m
         h.close()
 
     return truth
 
-def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, mode='BOSS'):
+def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None):
     '''
     reads data from input file
 
@@ -759,7 +783,7 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, mode='BO
     objclass = np.array([truth[t].objclass for t in tids])
     z_conf = np.array([truth[t].z_conf for t in tids])
 
-    Y = get_Y(objclass,z,z_conf,qso_zlim=z_lim,mode=mode)
+    Y = get_Y(objclass,z,z_conf,qso_zlim=z_lim)
 
     ## check that all spectra have exactly one classification
     assert (Y.sum(axis=1).min()==1) and (Y.sum(axis=1).max()==1)
@@ -771,70 +795,29 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, mode='BO
 
     return tids,X,Y,z,bal
 
-def get_Y(objclass,z,z_conf,qso_zlim=2.1,mode='BOSS'):
+def get_Y(objclass,z,z_conf,qso_zlim=2.1):
 
     Y = np.zeros((objclass.shape[0],5))
 
-    if mode == 'BOSS':
-        ## STAR
-        w = (objclass==1) & (z_conf==3)
-        Y[w,0] = 1
+    ## STAR
+    w = (objclass==1) & (z_conf==3)
+    Y[w,0] = 1
 
-        ## GALAXY
-        w = (objclass==4) & (z_conf==3)
-        Y[w,1] = 1
+    ## GALAXY
+    w = (objclass==2) & (z_conf==3)
+    Y[w,1] = 1
 
-        ## QSO_LZ
-        w = ((objclass==3) | (objclass==30)) & (z<qso_zlim) & (z_conf==3)
-        Y[w,2] = 1
+    ## QSO_LZ
+    w = (objclass==3) & (z<qso_zlim) & (z_conf==3)
+    Y[w,2] = 1
 
-        ## QSO_HZ
-        w = ((objclass==3) | (objclass==30)) & (z>=qso_zlim) & (z_conf==3)
-        Y[w,3] = 1
+    ## QSO_HZ
+    w = (objclass==3) & (z>=qso_zlim) & (z_conf==3)
+    Y[w,3] = 1
 
-        ## BAD
-        w = (z_conf != 3)
-        Y[w,4] = 1
-    elif mode == 'DESI':
-        ## STAR
-        w = ((objclass=='STAR') | (objclass=='WD')) & (z_conf==4)
-        Y[w,0] = 1
-
-        ## GALAXY
-        w = (objclass=='GALAXY') & (z_conf==4)
-        Y[w,1] = 1
-
-        ## QSO_LZ
-        w = (objclass=='QSO') & (z<qso_zlim) & (z_conf==4)
-        Y[w,2] = 1
-
-        ## QSO_HZ
-        w = (objclass=='QSO') & (z>=qso_zlim) & (z_conf==4)
-        Y[w,3] = 1
-
-        ## BAD
-        w = (z_conf != 4)
-        Y[w,4] = 1
-    elif mode == 'DESISIM':
-        ## STAR
-        w = ((objclass=='STAR') | (objclass=='WD')) & (z_conf==4)
-        Y[w,0] = 1
-
-        ## GALAXY
-        w = (objclass=='GALAXY') & (z_conf==4)
-        Y[w,1] = 1
-
-        ## QSO_LZ
-        w = (objclass=='QSO') & (z<qso_zlim) & (z_conf==4)
-        Y[w,2] = 1
-
-        ## QSO_HZ
-        w = (objclass=='QSO') & (z>=qso_zlim) & (z_conf==4)
-        Y[w,3] = 1
-
-        ## BAD
-        w = (z_conf != 4)
-        Y[w,4] = 1
+    ## BAD
+    w = (z_conf != 3)
+    Y[w,4] = 1
 
     return Y
 
