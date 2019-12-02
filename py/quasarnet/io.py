@@ -463,14 +463,14 @@ def read_truth_desisim(truth):
 
     h = fitsio.FITS(truth)
 
-    colnames = [tid_field['TARGETID']]
-    cols = [h[1][tid_field['TARGETID']][:]]
-
+    tr_dict = {}
+    tr_dict[tid_field['TARGETID']] = h[1][tid_field['TARGETID']][:]
     for k in truth_fields.keys():
-        colnames += [k]
-        cols += [h[1][truth_fields[k]][:]]
+        tr_dict[k] = h[1][truth_fields[k]][:]
 
-    return cols, colnames
+    h.close()
+
+    return tr_dict
 
 def read_targets_desisim(targets,targeting_bits):
 
@@ -478,13 +478,13 @@ def read_targets_desisim(targets,targeting_bits):
 
     h = fitsio.FITS(targets)
 
-    colnames = [tid_field['TARGETID']]
-    cols = [h[1][tid_field['TARGETID']][:]]
+    ta_dict = {}
+    ta_dict[tid_field['TARGETID']] = h[1][tid_field['TARGETID']][:]
+    ta_dict[targeting_bits] = h[1][targeting_bits][:]
 
-    colnames += [targeting_bits]
-    cols += [h[1][targeting_bits][:]]
+    h.close()
 
-    return cols, colnames
+    return ta_dict
 
 ## ??
 def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
