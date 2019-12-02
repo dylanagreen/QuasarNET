@@ -610,7 +610,7 @@ def read_truth(fi, mode='BOSS'):
                 for k in fd.keys():
                     # Get the data from the column corresponding to that key's
                     # corresponding value, and add it to the metadata.
-                    setattr(m,k,h[1][k][i])
+                    setattr(m,k.lower(),h[1][k][i])
             truth[t] = m
         h.close()
 
