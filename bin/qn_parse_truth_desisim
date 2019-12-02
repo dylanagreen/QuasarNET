@@ -28,12 +28,7 @@ args = parser.parse_args()
 
 ## Try to load the DESI quasar mask.
 ## Otherwise use a hardcoded value (with warning).
-try:
-    from desitarget import desi_mask
-    quasar_mask = desi_mask.mask('QSO')
-except:
-    print("WARN: can't load desi_mask, using hardcoded targetting value!")
-    quasar_mask = 2**2
+quasar_mask = utils.get_quasar_mask()
 
 ## Open the truth and targeting files and extract the relevant data.
 cols_tr, colnames_tr = io.read_truth_desisim(args.truth)
@@ -41,6 +36,7 @@ cols_ta, colnames_ta = io.read_targets_desisim(args.targets,args.targeting_bits)
 
 ## Filter to only include QSO targets.
 w_ta = (cols_ta[1] & quasar_mask)>0
+print('INFO: {} objects are QSO targets (out of {})'.format(w_ta.sum(),len(w_ta)))
 w = np.in1d(cols_tr[0],cols_ta[0][w_ta])
 for c in cols_tr:
     c = c[w]
