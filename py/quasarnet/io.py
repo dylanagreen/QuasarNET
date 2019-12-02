@@ -603,7 +603,6 @@ def read_truth(fi, mode='BOSS'):
         tids = h[1][tid_field['TARGETID']][:]
         # Cycle through each tid.
         for i,t in enumerate(tids):
-            print((i+1)/len(tids),end='\r')
             m = metadata()
             # For each of the important field groups:
             for fd in [truth_fields,bal_fields]:
