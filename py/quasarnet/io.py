@@ -271,13 +271,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, targetin
     if ignore_quasar_mask:
         quasar_mask = -1
     else:
-        try:
-            from desitarget import desi_mask
-            quasar_mask = desi_mask.mask('QSO')
-        except:
-            if verbose:
-                print("WARN: can't load desi_mask, using hardcoded targetting value!")
-            quasar_mask = 2**2
+        quasar_mask = utils.get_quasar_mask(verbose=verbose)
 
     if not isinstance(fin,list):
         fin = [fin]
@@ -312,7 +306,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, targetin
                     spid2 = spid2[check]
                     fl = fl[check,:]
                     iv = iv[check,:]
-            
+
             # Add the flux and iv arrays for this file to a list.
             tids_list += [tids]
             spid0_list += [spid0]
@@ -356,10 +350,10 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'
     h = fitsio.FITS(f)
 
     wqso = ((h[1][targeting_bits][:] & quasar_mask)>0)
-    
+
     nspec_init = wqso.sum()
     if nspec_init == 0: return None
-    
+
     if verbose:
         print("INFO: found {} target spectra".format(nqso_f))
 
@@ -582,7 +576,7 @@ def read_truth(fi, mode='BOSS'):
         fi -- list of truth files (list of string)
 
     Returns:
-        truth -- dictionary of THING_ID: metadata instance
+        truth -- dictionary of THING_ID: truth data instance
 
     '''
 

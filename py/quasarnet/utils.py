@@ -222,6 +222,17 @@ def get_bal_fields(mode):
 
     return truth_fields
 
+def get_quasar_mask(verbose=True):
+
+    try:
+        from desitarget import desi_mask
+        quasar_mask = desi_mask.mask('QSO')
+    except:
+        if verbose:
+            print("WARN: can't load desi_mask, using hardcoded targetting value!")
+        quasar_mask = 2**2
+
+    return quasar_mask
 
 # TODO: move this?
 absorber_IGM = {
