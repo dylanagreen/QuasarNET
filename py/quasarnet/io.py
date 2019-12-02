@@ -591,7 +591,6 @@ def read_truth(fi, mode='BOSS'):
     """
 
     tid_field = utils.get_tid_field(mode)
-    spid_fields = utils.get_spectrum_id_fields(mode)
     truth_fields = utils.get_truth_fields(mode)
     bal_fields = utils.get_bal_fields(mode)
 
@@ -604,14 +603,15 @@ def read_truth(fi, mode='BOSS'):
         tids = h[1][tid_field['TARGETID']][:]
         # Cycle through each tid.
         for i,t in enumerate(tids):
+            print((i+1)/len(tids),end='\r')
             m = metadata()
             # For each of the important field groups:
-            for fd in [spid_fields,truth_fields,bal_fields]:
+            for fd in [truth_fields,bal_fields]:
                 # For each key:
                 for k in fd.keys():
                     # Get the data from the column corresponding to that key's
                     # corresponding value, and add it to the metadata.
-                    setattr(m,k,h[1][fd[k]][i])
+                    setattr(m,k,h[1][k][i])
             truth[t] = m
         h.close()
 
