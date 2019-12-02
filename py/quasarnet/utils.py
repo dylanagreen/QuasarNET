@@ -234,6 +234,40 @@ def get_quasar_mask(verbose=True):
 
     return quasar_mask
 
+def get_class_codes(mode):
+
+    ## Unobserved is 0
+    ## Star or WD is 1
+    ## Galaxy is 2
+    ## QSO is 3
+
+    class_codes = {}
+
+    if mode == 'BOSS':
+
+        class_codes[0] = [0]
+        class_codes[1] = [1]
+        class_codes[2] = [4]
+        class_codes[3] = [3,30]
+
+    elif mode == 'DESI':
+
+        # TODO: Not sure about 0 here.
+        class_codes[0] = ['']
+        class_codes[1] = ['STAR','WD']
+        class_codes[2] = ['GALAXY']
+        class_codes[3] = ['QSO']
+
+    elif mode == 'DESISIM':
+
+        # TODO: Not sure about 0 here.
+        class_codes[0] = ['']
+        class_codes[1] = ['STAR','WD']
+        class_codes[2] = ['GALAXY']
+        class_codes[3] = ['QSO']
+
+    return class_codes
+
 # TODO: move this?
 absorber_IGM = {
     'Halpha'      : 6562.8,
