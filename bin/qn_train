@@ -18,14 +18,15 @@ parser.add_argument("-l","--lines", type = str,
         required=False, default = ["LYA"], nargs="*")
 parser.add_argument("-b","--lines-bal", type = str,
         required=False, default = ["CIV(1548)"], nargs="*")
+parser.add_argument("-m","--mode", type = str, required=True)
 parser.add_argument("--decay", type = float, required=False,
         default = 0.)
 
 args = parser.parse_args()
 
 ## Load the training data and the truth table.
-truth = io.read_truth(args.truth)
-tids,X,Y,z,bal = io.read_data(args.data, truth)
+truth = io.read_truth(args.truth,mode=args.mode)
+tids,X,Y,z,bal = io.read_data(args.data,truth,mode=args.mode)
 
 ## Set up the model.
 model = QuasarNET(
