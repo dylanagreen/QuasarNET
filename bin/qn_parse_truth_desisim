@@ -37,9 +37,7 @@ ta_dict = io.read_targets_desisim(args.targets,args.targeting_bits)
 ## Filter to only include QSO targets.
 w_ta = (ta_dict[args.targeting_bits] & quasar_mask)>0
 print('INFO: {} objects are QSO targets (out of {})'.format(w_ta.sum(),len(w_ta)))
-print(len(ta_dict['TARGETID'][w_ta]))
 w = np.in1d(tr_dict['TARGETID'],ta_dict['TARGETID'][w_ta])
-print(w.sum(),len(w))
 for k in tr_dict.keys():
     tr_dict[k] = tr_dict[k][w]
 
