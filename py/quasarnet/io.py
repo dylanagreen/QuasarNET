@@ -55,6 +55,9 @@ def read_sdrq(sdrq, mode='BOSS'):
     objclass_codes = codify_objclass(data['OBJCLASS'],mode)
     data['OBJCLASS'] = objclass_codes
 
+    zconf_codes = codify_zconf(data['Z_CONF'],'DESISIM')
+    data['Z_CONf'] = zconf_codes
+
     ## Construct dictionaries {targetid: class, z_conf, z}, and
     ## {(spid0, spid1, spid2): targetid}.
     t2t_data = zip(data['TARGETID'],data['OBJCLASS'],data['Z_CONF'],data['Z'])
@@ -471,8 +474,19 @@ def read_truth_desisim(truth):
     for k in truth_fields.keys():
         tr_dict[k] = h[1][truth_fields[k]][:]
 
+    ## For a simulation, we have an absolute truth, and so add "confidence"
+    ## artificially.
+    tr_dict['Z_CONF'] = 4*np.ones_like(tr_dict['Z'])
+
+    ## OBJCLASS is a string, and has trailing spaces (fitsio related).
+    ## We remove them here to avoid confusion.
+    tr_dict['OBJCLASS'] = np.array([y.strip(' ') for y in tr_dict['OBJCLASS']])
+    
     objclass_codes = codify_objclass(tr_dict['OBJCLASS'],'DESISIM')
     tr_dict['OBJCLASS'] = objclass_codes
+
+    zconf_codes = codify_zconf(tr_dict['Z_CONF'],'DESISIM')
+    tr_dict['Z_CONF'] = zconf_codes
 
     h.close()
 
@@ -496,7 +510,7 @@ def codify_objclass(objclass,mode):
 
     ## Get a dictionary mapping the coded classes to a list of the native class
     ## names included in that class.
-    cc_dict = get_class_codes(mode)
+    cc_dict = utils.get_class_codes(mode)
 
     ## For each class code, find which objects have native class names that fall
     ## into its class.
@@ -507,6 +521,22 @@ def codify_objclass(objclass,mode):
         objclass_codes[w] = k
 
     return objclass_codes
+
+def codify_zconf(zconf,mode):
+
+    ## Get a dictionary mapping the coded classes to a list of the native class
+    ## names included in that class.
+    zc_dict = utils.get_zconf_codes(mode)
+
+    ## For each class code, find which objects have native class names that fall
+    ## into its class.
+    zconf_codes = np.zeros(zconf.shape)
+    for k in zc_dict.keys():
+        w = [zconf==classname for classname in zc_dict[k]]
+        w = np.any(w,axis=0)
+        zconf_codes[w] = k
+
+    return zconf_codes
 
 ## ??
 def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
@@ -605,14 +635,7 @@ def read_truth(fi):
     class metadata:
         pass
 
-    """
-    # Removed this, instead just read the cols from each file
-    cols = ['Z_VI','PLATE',
-            'MJD','FIBERID','CLASS_PERSON',
-            'Z_CONF_PERSON','BAL_FLAG_VI','BI_CIV']
-    """
-
-    cols = list(utils.get_truth_fields().keys()) + list(utils.get_bal_fields().keys())
+    cols = list(utils.get_truth_fields(None).keys()) + list(utils.get_bal_fields(None).keys())
 
     truth = {}
 
@@ -621,21 +644,12 @@ def read_truth(fi):
         # Open the file and get the tids.
         h = fitsio.FITS(f)
         tids = h[1]['TARGETID'][:]
+        cols_dict = {c.lower():h[1][c][:] for c in cols}
         # Cycle through each tid.
         for i,t in enumerate(tids):
             m = metadata()
-            """
-            # For each of the important field groups:
-            for fd in [truth_fields,bal_fields]:
-                # For each key:
-                for k in fd.keys():
-                    # Get the data from the column corresponding to that key's
-                    # corresponding value, and add it to the metadata.
-                    setattr(m,k.lower(),h[1][k][i])
-                    setattr(m,k,h[1][k][i])
-            """
-            for c in cols:
-                setattr(m,c.lower(),h[1][c][i])
+            for c in cols_dict.keys():
+                setattr(m,c,cols_dict[c][i])
             truth[t] = m
         h.close()
 
@@ -801,23 +815,23 @@ def get_Y(objclass,z,z_conf,qso_zlim=2.1):
     Y = np.zeros((objclass.shape[0],5))
 
     ## STAR
-    w = (objclass==1) & (z_conf==3)
+    w = (objclass==1) & (z_conf==2)
     Y[w,0] = 1
 
     ## GALAXY
-    w = (objclass==2) & (z_conf==3)
+    w = (objclass==2) & (z_conf==2)
     Y[w,1] = 1
 
     ## QSO_LZ
-    w = (objclass==3) & (z<qso_zlim) & (z_conf==3)
+    w = (objclass==3) & (z<qso_zlim) & (z_conf==2)
     Y[w,2] = 1
 
     ## QSO_HZ
-    w = (objclass==3) & (z>=qso_zlim) & (z_conf==3)
+    w = (objclass==3) & (z>=qso_zlim) & (z_conf==2)
     Y[w,3] = 1
 
     ## BAD
-    w = (z_conf != 3)
+    w = (z_conf != 2)
     Y[w,4] = 1
 
     return Y

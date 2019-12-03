@@ -161,6 +161,9 @@ def get_tid_field(mode):
     elif mode == 'DESISIM':
         tid_field['TARGETID'] = 'TARGETID'
 
+    elif mode == None:
+        tid_field['TARGETID'] = ''
+
     return tid_field
 
 def get_spectrum_id_fields(mode):
@@ -182,6 +185,11 @@ def get_spectrum_id_fields(mode):
         spid_fields['SPID1'] = 'NIGHT'
         spid_fields['SPID2'] = 'FIBER'
 
+    elif mode == None:
+        spid_fields['SPID0'] = ''
+        spid_fields['SPID1'] = ''
+        spid_fields['SPID2'] = ''
+
     return spid_fields
 
 def get_truth_fields(mode):
@@ -202,25 +210,34 @@ def get_truth_fields(mode):
         truth_fields['Z'] =         'TRUEZ'
         truth_fields['OBJCLASS'] =  'TRUESPECTYPE'
 
+    elif mode == None:
+        truth_fields['Z'] =         ''
+        truth_fields['OBJCLASS'] =  ''
+        truth_fields['Z_CONF'] =    ''
+
     return truth_fields
 
 def get_bal_fields(mode):
 
-    truth_fields = {}
+    bal_fields = {}
 
     if mode == 'BOSS':
-        truth_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
-        truth_fields['BI_CIV'] =   'BI_CIV'
+        bal_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
+        bal_fields['BI_CIV'] =   'BI_CIV'
 
     elif mode == 'DESI':
-        truth_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
-        truth_fields['BI_CIV'] =   'BI_CIV'
+        bal_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
+        bal_fields['BI_CIV'] =   'BI_CIV'
 
     elif mode == 'DESISIM':
-        truth_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
-        truth_fields['BI_CIV'] =   'BI_CIV'
+        bal_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
+        bal_fields['BI_CIV'] =   'BI_CIV'
 
-    return truth_fields
+    elif mode == None:
+        bal_fields['BAL_FLAG'] =  ''
+        bal_fields['BI_CIV'] =    ''
+
+    return bal_fields
 
 def get_quasar_mask(verbose=True):
 
@@ -265,6 +282,36 @@ def get_class_codes(mode):
         class_codes[1] = ['STAR','WD']
         class_codes[2] = ['GALAXY']
         class_codes[3] = ['QSO']
+
+    return class_codes
+
+def get_zconf_codes(mode):
+
+    ## Unobserved is 0
+    ## Insufficient confidence is 1
+    ## Sufficient confidence is 2
+
+    class_codes = {}
+
+    if mode == 'BOSS':
+
+        class_codes[0] = [0]
+        class_codes[1] = [1,2]
+        class_codes[2] = [3]
+
+    elif mode == 'DESI':
+
+        # TODO: Not sure about 0 here.
+        class_codes[0] = [0]
+        class_codes[1] = [1,2,3]
+        class_codes[2] = [4]
+
+    elif mode == 'DESISIM':
+
+        # TODO: Not sure about 0 here.
+        class_codes[0] = [0]
+        class_codes[1] = [1,2,3]
+        class_codes[2] = [4]
 
     return class_codes
 
