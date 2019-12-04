@@ -26,7 +26,7 @@ parser.add_argument('--spall',type=str,required=True,
         help='the spall file (same pipeline version as the --data')
 
 parser.add_argument('--lines',type=str,nargs="*",
-        required=False,default=['LYA', 'CIV(1548)', 
+        required=False,default=['LYA', 'CIV(1548)',
             'CIII(1909)', 'MgII(2796)' ,'Hbeta', 'Halpha'],
         help='the list of emission lines used to train the model'
         )
@@ -47,14 +47,14 @@ parser.add_argument('--out-suffix',type=str,required=True,
 
 args=parser.parse_args()
 
-tids,X,plate,mjd,fid = read_data(args.data, return_pmf=True)
+tids,X,plate,mjd,fid = read_data(args.data, return_spid=True)
 
-m=args.model
+m = args.model
 print('loading model {}'.format(m))
-model=load_model(m, custom_objects={'custom_loss':custom_loss})
+model = load_model(m, custom_objects={'custom_loss':custom_loss})
 
 print('predicting...')
-aux=model.predict(X[:,:,None])
+aux = model.predict(X[:,:,None])
 print('prediction done')
 
 c_line,z_line,zbest,c_line_bal,z_line_bal =\
@@ -70,14 +70,14 @@ fid_spall = spall[1]['FIBERID'][:]
 ra_spall = spall[1]['RA'][:]
 dec_spall = spall[1]['DEC'][:]
 sprim_spall = spall[1]['SPECPRIMARY'][:]
-spall_dict = {(p,m,f):t for t,p,m,f in zip(tids_spall, 
+spall_dict = {(p,m,f):t for t,p,m,f in zip(tids_spall,
     plate_spall, mjd_spall, fid_spall)}
 
 dic_spall = {t:(r,d,s) for t,r,d,s in zip(tids_spall,ra_spall,
     dec_spall,sprim_spall)}
 
 spall.close()
-    
+
 h_train=fitsio.FITS(args.data_training)
 plate_train = h_train[1]['PLATE'][:]
 mjd_train = h_train[1]['MJD'][:]
@@ -96,7 +96,7 @@ cols = [tids]
 names = ['THING_ID']
 cols += [plate,mjd,fid]
 names += ['PLATE','MJD','FIBERID']
-    
+
 cols += [zbest, isqso.astype(int), in_train.astype(int)]
 names += ['ZBEST','IS_QSO','IN_TRAIN']
 cols.append(c_line.T)
@@ -139,4 +139,3 @@ cols += [zbest[isqso], ra[isqso], dec[isqso], isbal[isqso]]
 names += ['Z','RA','DEC','BI_CIV']
 
 hout.write(cols, names=names)
-
