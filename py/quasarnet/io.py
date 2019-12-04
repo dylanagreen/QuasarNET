@@ -361,7 +361,7 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'
     if nspec_init == 0: return None
 
     if verbose:
-        print("INFO: found {} target spectra".format(nqso_f))
+        print("INFO: found {} target spectra".format(nspec_init))
 
     tids = h[1][tid_field['TARGETID']][:][wqso]
     spid0 = h[1][spid_fields['SPID0']][:][wqso]
@@ -379,7 +379,7 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'
         if len(j)>1:
             w[j[0]] = 1
             if verbose:
-                print('WARN: (tid,spid)={} is duplicated'.format(met))
+                print('WARN: (tid,spid)={} is duplicated'.format(um))
         else:
             w[j] = 1
 
@@ -636,21 +636,46 @@ def read_truth(fi):
         pass
 
     cols = list(utils.get_truth_fields(None).keys()) + list(utils.get_bal_fields(None).keys())
+    
+    truth_cols = list(utils.get_truth_fields(None).keys())
+    bal_cols = list(utils.get_bal_fields(None).keys())
+
+    BOSS_tf_dict = utils.get_truth_fields('BOSS')
+    BOSS_bf_dict = utils.get_bal_fields('BOSS')
 
     truth = {}
 
     ## Cycle through the files, extracting data from each one.
     for f in fi:
+        
         # Open the file and get the tids.
         h = fitsio.FITS(f)
-        tids = h[1]['TARGETID'][:]
-        cols_dict = {c.lower():h[1][c][:] for c in cols}
+        try:
+            tids = h[1]['TARGETID'][:]
+        except ValueError:
+            tids = h[1]['THING_ID'][:]
+
+        try:
+            truth_cols_dict = {c.lower():h[1][c][:] for c in truth_cols}
+        except ValueError:
+            truth_cols_dict = {c.lower():h[1][BOSS_tf_dict[c]][:] for c in truth_cols}
+            truth_cols_dict['objclass'] = codify_objclass(truth_cols_dict['objclass'],'BOSS')
+            truth_cols_dict['z_conf'] = codify_zconf(truth_cols_dict['z_conf'],'BOSS')
+
+        try:
+            bal_cols_dict = {c.lower():h[1][c][:] for c in bal_cols}
+        except ValueError:
+            bal_cols_dict = {c.lower():h[1][BOSS_bf_dict[c]][:] for c in bal_cols}
+
         # Cycle through each tid.
         for i,t in enumerate(tids):
             m = metadata()
-            for c in cols_dict.keys():
-                setattr(m,c,cols_dict[c][i])
+            for c in truth_cols_dict.keys():
+                setattr(m,c,truth_cols_dict[c][i])
+            for c in bal_cols_dict.keys():
+                setattr(m,c,bal_cols_dict[c][i])
             truth[t] = m
+        
         h.close()
 
     return truth
