@@ -26,18 +26,26 @@ parser.add_argument('--out-prefix',type=str, required=True,
 
 args=parser.parse_args()
 
+## If we have too many training splits (or too high a training proportion) to
+## preserve complementarity then raise an error and exit.
+## e.g. if training proportion is set to 10%, then we can have at most 10
+## complementary splits.
+if 1/args.training_proportion > args.nsplits:
+    raise ValueError('Cannot have {} complementary splits with {:.2%} of the data in each'.format(args.nsplits,args.training_proportion))
+
 ## Get the number of spectra in the data file.
 h = fitsio.FITS(args.data)
 nspec = h[0].get_dims()[0]
 
 ## For each split number, determine the
 state = np.random.RandomState(seed=args.seed)
+w = state.uniform(size=nspec)
 for i in range(args.nsplits):
-    w = (state.uniform(size=nspec)<args.training_proportion)
+    w_split = (args.training_proportion*i<=w<args.training_proportion*(i+1))
 
     ## Write the output to a fits file, with flux/iv in the primary HDU, and a
     ## catalog of objects in the 1st extension.
     h_split = fitsio.FITS(args.out_prefix+'_{}.fits'.format(i),'rw',clobber=True)
-    h_split.write(h[0][:,:][w,:])
-    h_split.write(h[1][:][w],header=h[1].read_header())
+    h_split.write(h[0][:,:][w_split,:])
+    h_split.write(h[1][:][w_split],header=h[1].read_header())
     h_split.close()
