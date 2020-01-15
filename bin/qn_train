@@ -54,6 +54,10 @@ history = model.fit(X[:,:,None], box,
         epochs = args.epochs,
         batch_size = 256,
         sample_weight = sample_weight)
+        #use_multiprocessing = True)
+        #shuffle = True,
+        #validation_split = 0.2)
+        #use_multiprocessing = True)
 
 ## Save the fitted model and printa a summary.
 model.save(args.out_prefix+".h5")

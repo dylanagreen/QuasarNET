@@ -30,7 +30,7 @@ args=parser.parse_args()
 ## preserve complementarity then raise an error and exit.
 ## e.g. if training proportion is set to 10%, then we can have at most 10
 ## complementary splits.
-if 1/(1-args.training_proportion) > args.nsplits:
+if 1/(1-args.training_proportion) < args.nsplits:
     raise ValueError('Cannot have {} complementary test sets with {:.2%}'.format(args.nsplits,1-args.training_proportion))
 
 ## Get the number of spectra in the data file.
@@ -41,7 +41,11 @@ nspec = h[0].get_dims()[0]
 state = np.random.RandomState(seed=args.seed)
 w = state.uniform(size=nspec)
 for i in range(args.nsplits):
-    w_split = ~(args.training_proportion*i<=w<args.training_proportion*(i+1))
+    w_split = ~(((1-args.training_proportion)*i<=w) * (w<(1-args.training_proportion)*(i+1)))
+    print(h[0])
+    print(h[1])
+    print(h[0][:,:][w_split,:].shape)
+    print(h[1][:][w_split].shape)
 
     ## Write the output to a fits file, with flux/iv in the primary HDU, and a
     ## catalog of objects in the 1st extension.

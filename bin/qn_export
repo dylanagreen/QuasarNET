@@ -3,7 +3,7 @@
 import glob
 from keras.models import load_model
 from quasarnet.models import custom_loss
-from quasarnet.io import read_data, read_desi_truth
+from quasarnet.io import read_data
 from scipy.interpolate import interp1d
 from numpy import in1d, array
 from quasarnet.io import read_data
