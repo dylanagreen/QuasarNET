@@ -71,7 +71,7 @@ def read_sdrq(sdrq, mode='BOSS'):
     return tid2truth, spid2tid, cols, colnames
 
 ## spcframe = individual exposures of spectra
-def read_spcframe(b_spcframe,r_spcframe):
+def read_spcframe(b_spcframe,r_spcframe,fibers):
 
     '''
     reads data from spcframes
@@ -81,8 +81,8 @@ def read_spcframe(b_spcframe,r_spcframe):
         r_spcframe -- spcframe from r part of spectrograph
 
     Returns:
-        fids -- fiberids ?
-        data -- ?
+        fids -- fiberids
+        data -- flux/iv
     '''
 
     data = []
@@ -113,6 +113,7 @@ def read_spcframe(b_spcframe,r_spcframe):
     except:
         pass
     wqso = wqso>0
+
     print("INFO: found {} quasars in file {}".format(wqso.sum(),b_spcframe))
 
     plate = hb[0].read_header()["PLATEID"]
@@ -121,11 +122,17 @@ def read_spcframe(b_spcframe,r_spcframe):
     iv = np.hstack((hb[1].read()*(hb[2].read()==0),hr[1].read()*(hr[2].read()==0)))
     ll = np.hstack((hb[3].read(),hr[3].read()))
 
+    ## Filter the fiberids in the file by those we're interested in.
+    wqso *= np.in1d(fid, fibers)
+
+    ## Reduce the data to the spectra we're interested in.
     fid = fid[wqso]
     fl = fl[wqso,:]
     iv = iv[wqso,:]
     ll = ll[wqso,:]
 
+    ## Rebin the spectra?
+    # TODO: Would like to redo this.
     for i in range(fl.shape[0]):
         fl_aux = np.zeros(nbins)
         iv_aux = np.zeros(nbins)
@@ -481,7 +488,7 @@ def read_truth_desisim(truth):
     ## OBJCLASS is a string, and has trailing spaces (fitsio related).
     ## We remove them here to avoid confusion.
     tr_dict['OBJCLASS'] = np.array([y.strip(' ') for y in tr_dict['OBJCLASS']])
-    
+
     objclass_codes = codify_objclass(tr_dict['OBJCLASS'],'DESISIM')
     tr_dict['OBJCLASS'] = objclass_codes
 
@@ -636,7 +643,7 @@ def read_truth(fi):
         pass
 
     cols = list(utils.get_truth_fields(None).keys()) + list(utils.get_bal_fields(None).keys())
-    
+
     truth_cols = list(utils.get_truth_fields(None).keys())
     bal_cols = list(utils.get_bal_fields(None).keys())
 
@@ -647,7 +654,7 @@ def read_truth(fi):
 
     ## Cycle through the files, extracting data from each one.
     for f in fi:
-        
+
         # Open the file and get the tids.
         h = fitsio.FITS(f)
         try:
@@ -675,7 +682,7 @@ def read_truth(fi):
             for c in bal_cols_dict.keys():
                 setattr(m,c,bal_cols_dict[c][i])
             truth[t] = m
-        
+
         h.close()
 
     return truth

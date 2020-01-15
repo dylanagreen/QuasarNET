@@ -12,6 +12,8 @@ parser.add_argument('--spplates',type=str, nargs="+", required=True)
 parser.add_argument('--spall',type=str, required=True)
 parser.add_argument('--sdrq',type=str, required=False, default=None)
 parser.add_argument('--out',type=str, required=True)
+parser.add_argument('--single-exposures',type=str, required=False)
+parser.add_argument('--spcframes',type=str, nargs="+", required=False)
 
 args=parser.parse_args()
 
@@ -82,6 +84,7 @@ plate = []
 mjd = []
 fibs = []
 nread = 0
+
 for p,m in plate_mjd:
     # Find all entries in args.spplates which contain information about this
     # (plate,mjd) pair. If no files are found, or if more than one file is
@@ -105,7 +108,47 @@ for p,m in plate_mjd:
     print('Reading file {}, nread={}, ntot={}'.format(f,nread,len(plate_mjd)))
     nread += 1
     fibers = plate_mjd[(p,m)]
-    aux = io.read_spplate(f, fibers)
+
+    if args.single_exposures:
+        h = fitsio.FITS(f)
+        head = h[0].read_header()
+
+        # Choose an exposure number at random from the spPlate file.
+        exps = list(set([head[k][:11] for k in head.keys() if 'EXPID' in k]))
+        b_exp = np.random.choice([e for e in exps if e[0]=='b'],replace=False)
+        r_exp = 'r'+b_exp[1:]
+
+        b_fname = 'spCFrame-{}.fits'.format(b_exp)
+        b_spcframe = [toto for toto in args.spcframes if b_fname in toto]
+        if len(b_spcframe)==0:
+            print('WARNING: spcframe file for exposure {} not found'.format(b_exp))
+            print('WARNING: ignoring file')
+            continue
+            #sys.exit(1)
+        if len(b_spcframe)>1:
+            print('WARNING: multiple files found for exposure', b_exp)
+            print('WARNING: exiting')
+            sys.exit(1)
+        b_spcframe = b_spcframe[0]
+
+        r_fname = 'spCFrame-{}.fits'.format(r_exp)
+        r_spcframe = [toto for toto in args.spcframes if r_fname in toto]
+        if len(r_spcframe)==0:
+            print('WARNING: spcframe file for exposure {} not found'.format(r_exp))
+            print('WARNING: ignoring file')
+            continue
+            #sys.exit(1)
+        if len(r_spcframe)>1:
+            print('WARNING: multiple files found for exposure', r_exp)
+            print('WARNING: exiting')
+            sys.exit(1)
+        r_spcframe = r_spcframe[0]
+
+        aux = io.read_spcframe(b_spcframe,r_spcframe,fibers)
+
+    else:
+        aux = io.read_spplate(f, fibers)
+
     if aux is not None:
         tids_plate = [thid_db[(p,m,fib)] for fib in aux[0]]
         tids.append(tids_plate)
