@@ -12,7 +12,8 @@ parser.add_argument('--spplates',type=str, nargs="+", required=True)
 parser.add_argument('--spall',type=str, required=True)
 parser.add_argument('--sdrq',type=str, required=False, default=None)
 parser.add_argument('--out',type=str, required=True)
-parser.add_argument('--single-exposures',type=str, required=False)
+parser.add_argument('--single-exposures', action='store_true', default=False,
+                    required=False)
 parser.add_argument('--spcframes',type=str, nargs="+", required=False)
 
 args=parser.parse_args()
