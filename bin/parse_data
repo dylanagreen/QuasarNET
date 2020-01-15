@@ -62,7 +62,8 @@ else:
     #wqso &= (plate_quality == 'good')
     # This doesn't seem to worrk any more for some reason.
     print(plate_quality[:5])
-    wqso &= plate_quality == b'good'
+    print(plate_quality.dtype)
+    wqso &= ((plate_quality == b'good') | (plate_quality == 'good'))
     print('INFO: after rejecting BAD plates, {} remain'.format(wqso.sum()))
 
     spall.close()
