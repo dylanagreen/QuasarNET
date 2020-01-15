@@ -18,7 +18,7 @@ parser.add_argument('--spcframes',type=str, nargs="+", required=False)
 
 args=parser.parse_args()
 
-if args.single_exposures & (len(args.spcframes)==0):
+if args.single_exposures & (args.spcframes is None):
     print('INFO: No spCFrame files provided, will search in same directory as each\nspPlate file')
     import glob
 
@@ -65,8 +65,6 @@ else:
     # Impose that the plate_quality must be 'good'
     #wqso &= (plate_quality == 'good')
     # This doesn't seem to worrk any more for some reason.
-    print(plate_quality[:5])
-    print(plate_quality.dtype)
     wqso &= ((plate_quality == b'good') | (plate_quality == 'good'))
     print('INFO: after rejecting BAD plates, {} remain'.format(wqso.sum()))
 
@@ -125,7 +123,7 @@ for p,m in plate_mjd:
         r_exp = 'r'+b_exp[1:]
 
         b_fname = 'spCFrame-{}.fits'.format(b_exp)
-        if args.single_exposures & (len(args.spcframes)==0):
+        if args.single_exposures & (args.spcframes is None):
             dir = f[:f.rfind('/')+1]
             search = glob.glob(dir+'*'+'/spCFrame*')
             b_spcframe = [toto for toto in search if b_fname in toto]
@@ -143,7 +141,7 @@ for p,m in plate_mjd:
         b_spcframe = b_spcframe[0]
 
         r_fname = 'spCFrame-{}.fits'.format(r_exp)
-        if args.single_exposures & (len(args.spcframes)==0):
+        if args.single_exposures & (args.spcframes is None):
             dir = f[:f.rfind('/')+1]
             search = glob.glob(dir+'*'+'/spCFrame*')
             r_spcframe = [toto for toto in search if r_fname in toto]
