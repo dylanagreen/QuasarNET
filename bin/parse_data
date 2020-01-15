@@ -18,6 +18,10 @@ parser.add_argument('--spcframes',type=str, nargs="+", required=False)
 
 args=parser.parse_args()
 
+if args.single_exposures & (len(args.spcframes)==0):
+    print('INFO: No spCFrame files provided, will search in same directory as each\nspPlate file')
+    import glob
+
 ## Construct a dictionary (plate, mjd, fiberid) => thing_id
 print('INFO: reading spall')
 tids_spall, thid_db = io.read_spall(args.spall)
@@ -120,7 +124,12 @@ for p,m in plate_mjd:
         r_exp = 'r'+b_exp[1:]
 
         b_fname = 'spCFrame-{}.fits'.format(b_exp)
-        b_spcframe = [toto for toto in args.spcframes if b_fname in toto]
+        if args.single_exposures & (len(args.spcframes)==0):
+            dir = f[:f.rfind('/')+1]
+            search = glob.glob(dir+'*'+'/spCFrame*')
+            b_spcframe = [toto for toto in search if b_fname in toto]
+        else:
+            b_spcframe = [toto for toto in args.spcframes if b_fname in toto]
         if len(b_spcframe)==0:
             print('WARNING: spcframe file for exposure {} not found'.format(b_exp))
             print('WARNING: ignoring file')
@@ -133,7 +142,12 @@ for p,m in plate_mjd:
         b_spcframe = b_spcframe[0]
 
         r_fname = 'spCFrame-{}.fits'.format(r_exp)
-        r_spcframe = [toto for toto in args.spcframes if r_fname in toto]
+        if args.single_exposures & (len(args.spcframes)==0):
+            dir = f[:f.rfind('/')+1]
+            search = glob.glob(dir+'*'+'/spCFrame*')
+            r_spcframe = [toto for toto in search if r_fname in toto]
+        else:
+            r_spcframe = [toto for toto in args.spcframes if r_fname in toto]
         if len(r_spcframe)==0:
             print('WARNING: spcframe file for exposure {} not found'.format(r_exp))
             print('WARNING: ignoring file')
