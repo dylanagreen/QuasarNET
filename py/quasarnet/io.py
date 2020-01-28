@@ -221,7 +221,7 @@ def read_spplate(fin, fibers, verbose=False):
     '''
 
     ## Open the file and read data from the header.
-    
+
     ## Want to switch to astropy.io.fits here, as fitsio crashes when certain files are used.
     ## For example, the header keyname 'EXPID**' in /global/projecta/projectdirs/sdss/data/sdss/dr13/eboss/spectro/redux/v5_9_0/6138/spPlate-6138-56598.fits
     h = fitsio.FITS(fin)
@@ -236,7 +236,7 @@ def read_spplate(fin, fibers, verbose=False):
     h = fits.open(f)
     head = h[0].header
     """
-    
+
     c0 = head["COEFF0"]
     c1 = head["COEFF1"]
     p = head["PLATEID"]
@@ -517,24 +517,24 @@ def read_truth_desisim(truth_files):
         for k in truth_fields.keys():
             tr_dict[k].append(h[1][truth_fields[k]][:])
 
-        ## For a simulation, we have an absolute truth, and so add "confidence"
-        ## artificially.
-        tr_dict['Z_CONF'] = 4*np.ones_like(tr_dict['Z'])
-
-        ## OBJCLASS is a string, and has trailing spaces (fitsio related).
-        ## We remove them here to avoid confusion.
-        tr_dict['OBJCLASS'] = np.array([y.strip(' ') for y in tr_dict['OBJCLASS']])
-
-        objclass_codes = codify_objclass(tr_dict['OBJCLASS'],'DESISIM')
-        tr_dict['OBJCLASS'] = objclass_codes
-
-        zconf_codes = codify_zconf(tr_dict['Z_CONF'],'DESISIM')
-        tr_dict['Z_CONF'] = zconf_codes
-
         h.close()
 
     for k in truth_fields.keys():
         tr_dict[k] = np.hstack(tr_dict[k])
+
+    ## For a simulation, we have an absolute truth, and so add "confidence"
+    ## artificially.
+    tr_dict['Z_CONF'] = 4*np.ones_like(tr_dict['Z'])
+
+    ## OBJCLASS is a string, and has trailing spaces (fitsio related).
+    ## We remove them here to avoid confusion.
+    tr_dict['OBJCLASS'] = np.array([y.strip(' ') for y in tr_dict['OBJCLASS']])
+
+    objclass_codes = codify_objclass(tr_dict['OBJCLASS'],'DESISIM')
+    tr_dict['OBJCLASS'] = objclass_codes
+
+    zconf_codes = codify_zconf(tr_dict['Z_CONF'],'DESISIM')
+    tr_dict['Z_CONF'] = zconf_codes
 
     return tr_dict
 
