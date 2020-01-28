@@ -71,7 +71,7 @@ def read_sdrq(sdrq, mode='BOSS'):
     return tid2truth, spid2tid, cols, colnames
 
 ## spcframe = individual exposures of spectra
-def read_spcframe(b_spcframe,r_spcframe,fibers):
+def read_spcframe(b_spcframe,r_spcframe,fibers, verbose=False):
 
     '''
     reads data from spcframes
@@ -90,6 +90,14 @@ def read_spcframe(b_spcframe,r_spcframe,fibers):
 
     hb = fitsio.FITS(b_spcframe)
     hr = fitsio.FITS(r_spcframe)
+
+
+    wqso = np.ones(hb[5]['BOSS_TARGET1'][:].shape).astype('bool')
+
+    """
+    ## Old target filtering. Inconsistent with parse_data. Want to implement a function to carry this out consistently.
+    ## For now, remove it, and include input "fibers" to allow for external target filtering.
+
     target_bits = hb[5]["BOSS_TARGET1"][:]
     wqso = np.zeros(len(target_bits),dtype=bool)
     mask = [10,11,12,13,14,15,16,17,18,19,40,41,42,43,44]
@@ -113,8 +121,7 @@ def read_spcframe(b_spcframe,r_spcframe,fibers):
     except:
         pass
     wqso = wqso>0
-
-    print("INFO: found {} quasars in file {}".format(wqso.sum(),b_spcframe))
+    """
 
     plate = hb[0].read_header()["PLATEID"]
     fid = hb[5]["FIBERID"][:]
@@ -124,6 +131,9 @@ def read_spcframe(b_spcframe,r_spcframe,fibers):
 
     ## Filter the fiberids in the file by those we're interested in.
     wqso *= np.in1d(fid, fibers)
+
+    if verbose:
+        print("INFO: found {} quasars in file {}".format(wqso.sum(),b_spcframe))
 
     ## Reduce the data to the spectra we're interested in.
     fid = fid[wqso]
@@ -196,7 +206,7 @@ def read_spall(spall):
     return tid, pmf2tid
 
 ## Read the spectra files from BOSS (spplate) or DESI (desi_spectra)
-def read_spplate(fin, fibers):
+def read_spplate(fin, fibers, verbose=False):
 
     '''
     reads data from spplates
@@ -211,8 +221,22 @@ def read_spplate(fin, fibers):
     '''
 
     ## Open the file and read data from the header.
+    
+    ## Want to switch to astropy.io.fits here, as fitsio crashes when certain files are used.
+    ## For example, the header keyname 'EXPID**' in /global/projecta/projectdirs/sdss/data/sdss/dr13/eboss/spectro/redux/v5_9_0/6138/spPlate-6138-56598.fits
     h = fitsio.FITS(fin)
-    head = h[0].read_header()
+    try:
+        head = h[0].read_header()
+    except OSError:
+        print('WARNING: problem with reading headers in {}'.format(fin))
+        print('WARNING: Ignoring file')
+        return None
+
+    """
+    h = fits.open(f)
+    head = h[0].header
+    """
+    
     c0 = head["COEFF0"]
     c1 = head["COEFF1"]
     p = head["PLATEID"]
@@ -256,7 +280,8 @@ def read_spplate(fin, fibers):
     ## Filter out spectra with too many bad pixels.
     wbad = (iv==0)
     w = (wbad.sum(axis=1)>nmasked_max)
-    print('INFO: rejecting {} spectra with too many bad pixels'.format(w.sum()))
+    if verbose:
+        print('INFO: rejecting {} spectra with too many bad pixels'.format(w.sum()))
     if (~w).sum()==0:
         return None
     fl = fl[~w,:]
@@ -368,7 +393,6 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'
     else:
         wqso = np.ones_like(h[1][targeting_bits][:]).astype('bool')
 
-
     nspec_init = wqso.sum()
     if nspec_init == 0: return None
 
@@ -385,20 +409,20 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'
     umet = [tuple(x) for x in np.unique(met,axis=0)]
 
     ## Remove any entries with duplicated metadata.
-    w = np.zeros(tids.shape).astype('bool')
+    wdup = np.zeros(tids.shape).astype('bool')
     for um in umet:
         j = np.where([um==M for M in met])[0]
         if len(j)>1:
-            w[j[0]] = 1
+            wdup[j[0]] = 1
             if verbose:
                 print('WARN: (tid,spid)={} is duplicated'.format(um))
         else:
-            w[j] = 1
+            wdup[j] = 1
 
-    tids = tids[w]
-    spid0 = spid0[w]
-    spid1 = spid1[w]
-    spid2 = spid2[w]
+    tids = tids[wdup]
+    spid0 = spid0[wdup]
+    spid1 = spid1[wdup]
+    spid2 = spid2[wdup]
 
     nspec = len(tids)
     fl = np.zeros((nspec, nbins))
@@ -408,7 +432,9 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'
 
     wave_out = utils.Wave()
 
-    for band in ["B", "R", "Z"]:
+    bands = [x.get_extname()[0] for x in h.hdu_list if 'WAVELENGTH' in x.get_extname()]
+    #["B", "R", "Z"]
+    for band in bands:
         h_wave = h["{}_WAVELENGTH".format(band)].read()
 
         bins, w = utils.rebin_wave(h_wave,wave_out)
@@ -418,14 +444,14 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'
         # Filter by valid pixels and QSOs.
         fl_aux = h["{}_FLUX".format(band)].read()[:,w]
         iv_aux = h["{}_IVAR".format(band)].read()[:,w]
-        fl_aux = fl_aux[wqso]
-        iv_aux = iv_aux[wqso]
+        fl_aux = fl_aux[wqso][wdup]
+        iv_aux = iv_aux[wqso][wdup]
         ivfl_aux = fl_aux*iv_aux
 
         for i,t in enumerate(tids):
-            c = np.bincount(bins, weights = ivfl_aux[i])
+            c = np.bincount(bins, weights = ivfl_aux[i,:])
             fl[i,:len(c)] += c
-            c = np.bincount(bins, weights = iv_aux[i])
+            c = np.bincount(bins, weights = iv_aux[i,:])
             iv[i,:len(c)] += c
 
     # Normalise flux by dividing by summed ivars.
