@@ -466,7 +466,7 @@ def read_bal_data_drq(drq, mode='BOSS'):
     return bal_flag, bi_civ
 
 ## Simulated DESI specific functions.
-def read_bal_data_desisim(truth,bal_templates):
+def read_bal_data_desisim(truth_files,bal_templates):
     """
     Use a truth file and a BAL templates file to construct a dictionary mapping
     targetid to (bal_flag,bi_civ).
@@ -480,10 +480,15 @@ def read_bal_data_desisim(truth,bal_templates):
 
     ## Open the truth file, extract the templateid corresponding to each
     ## targetid.
-    h = fitsio.FITS(truth)
-    tids = h['TRUTH_QSO']['TARGETID'][:]
-    bal_templateid = h['TRUTH_QSO']['BAL_TEMPLATEID'][:]
-    h.close()
+    tids = []
+    bal_templateid = []
+    for f in truth_files:
+        h = fitsio.FITS(f)
+        tids.append(h['TRUTH_QSO']['TARGETID'][:])
+        bal_templateid.append(h['TRUTH_QSO']['BAL_TEMPLATEID'][:])
+        h.close()
+    tids = np.hstack(tids)
+    bal_templateid = np.hstack(bal_templateid)
 
     ## Open the templates file, extract the bi_civ for each templateid.
     h = fitsio.FITS(bal_templates)
