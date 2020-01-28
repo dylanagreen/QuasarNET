@@ -500,33 +500,41 @@ def read_bal_data_desisim(truth,bal_templates):
 
     return bal_data
 
-def read_truth_desisim(truth):
+def read_truth_desisim(truth_files):
 
     tid_field = utils.get_tid_field('DESISIM')
     truth_fields = utils.get_truth_fields('DESISIM')
 
-    h = fitsio.FITS(truth)
-
     tr_dict = {}
-    tr_dict[tid_field['TARGETID']] = h[1][tid_field['TARGETID']][:]
     for k in truth_fields.keys():
-        tr_dict[k] = h[1][truth_fields[k]][:]
+        tr_dict[k] = []
 
-    ## For a simulation, we have an absolute truth, and so add "confidence"
-    ## artificially.
-    tr_dict['Z_CONF'] = 4*np.ones_like(tr_dict['Z'])
+    for f in truth_files:
 
-    ## OBJCLASS is a string, and has trailing spaces (fitsio related).
-    ## We remove them here to avoid confusion.
-    tr_dict['OBJCLASS'] = np.array([y.strip(' ') for y in tr_dict['OBJCLASS']])
+        h = fitsio.FITS(f)
 
-    objclass_codes = codify_objclass(tr_dict['OBJCLASS'],'DESISIM')
-    tr_dict['OBJCLASS'] = objclass_codes
+        tr_dict[tid_field['TARGETID']] = h[1][tid_field['TARGETID']][:]
+        for k in truth_fields.keys():
+            tr_dict[k].append(h[1][truth_fields[k]][:])
 
-    zconf_codes = codify_zconf(tr_dict['Z_CONF'],'DESISIM')
-    tr_dict['Z_CONF'] = zconf_codes
+        ## For a simulation, we have an absolute truth, and so add "confidence"
+        ## artificially.
+        tr_dict['Z_CONF'] = 4*np.ones_like(tr_dict['Z'])
 
-    h.close()
+        ## OBJCLASS is a string, and has trailing spaces (fitsio related).
+        ## We remove them here to avoid confusion.
+        tr_dict['OBJCLASS'] = np.array([y.strip(' ') for y in tr_dict['OBJCLASS']])
+
+        objclass_codes = codify_objclass(tr_dict['OBJCLASS'],'DESISIM')
+        tr_dict['OBJCLASS'] = objclass_codes
+
+        zconf_codes = codify_zconf(tr_dict['Z_CONF'],'DESISIM')
+        tr_dict['Z_CONF'] = zconf_codes
+
+        h.close()
+
+    for k in truth_fields.keys():
+        tr_dict[k] = np.hstack(tr_dict[k])
 
     return tr_dict
 

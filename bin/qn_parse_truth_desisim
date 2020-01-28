@@ -8,16 +8,16 @@ from quasarnet import io, utils
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--truth', type=str, required=True,
+parser.add_argument('--truth-files', type=str, required=True,
         help='truth file')
 
-parser.add_argument('--targets', type=str, required=True,
+parser.add_argument('--targets', type=str, default=None, required=False,
         help='targets file')
 
-parser.add_argument('--bal-templates', type=str, required=True,
+parser.add_argument('--bal-templates', type=str, default=None, required=False,
         help='BAL templates file')
 
-parser.add_argument('--targeting-bits',type=str, required=True,
+parser.add_argument('--targeting-bits',type=str, required=False,
         choices=['DESI_TARGET','SV1_DESI_TARGET'],
         help='which targeting bits to use')
 
@@ -31,13 +31,18 @@ args = parser.parse_args()
 quasar_mask = utils.get_quasar_mask()
 
 ## Open the truth and targeting files and extract the relevant data.
-tr_dict = io.read_truth_desisim(args.truth)
-ta_dict = io.read_targets_desisim(args.targets,args.targeting_bits)
+tr_dict = io.read_truth_desisim(args.truth_files)
 
-## Filter to only include QSO targets.
-w_ta = (ta_dict[args.targeting_bits] & quasar_mask)>0
-print('INFO: {} objects are QSO targets (out of {})'.format(w_ta.sum(),len(w_ta)))
-w = np.in1d(tr_dict['TARGETID'],ta_dict['TARGETID'][w_ta])
+## If targets file provided, filter to only include QSO targets.
+if args.targets is not None:
+    ta_dict = io.read_targets_desisim(args.targets,args.targeting_bits)
+    w_ta = (ta_dict[args.targeting_bits] & quasar_mask)>0
+    print('INFO: {} objects are QSO targets (out of {})'.format(w_ta.sum(),len(w_ta)))
+    w = np.in1d(tr_dict['TARGETID'],ta_dict['TARGETID'][w_ta])
+else:
+    print('INFO: No QSO targetting used.')
+    w = np.ones_like(tr_dict['TARGETID']).astype('bool')
+    
 for k in tr_dict.keys():
     tr_dict[k] = tr_dict[k][w]
 
