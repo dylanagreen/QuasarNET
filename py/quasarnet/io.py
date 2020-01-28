@@ -506,19 +506,21 @@ def read_truth_desisim(truth_files):
     truth_fields = utils.get_truth_fields('DESISIM')
 
     tr_dict = {}
+    tr_dict[tid_field['TARGETID']] = []
     for k in truth_fields.keys():
         tr_dict[k] = []
 
     for f in truth_files:
 
         h = fitsio.FITS(f)
-
-        tr_dict[tid_field['TARGETID']] = h[1][tid_field['TARGETID']][:]
+        
+        tr_dict[tid_field['TARGETID']].append(h[1][tid_field['TARGETID']][:])
         for k in truth_fields.keys():
             tr_dict[k].append(h[1][truth_fields[k]][:])
 
         h.close()
 
+    tr_dict[tid_field['TARGETID']] = np.hstack(tr_dict[tid_field['TARGETID']])
     for k in truth_fields.keys():
         tr_dict[k] = np.hstack(tr_dict[k])
 
