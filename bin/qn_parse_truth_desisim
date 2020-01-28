@@ -8,7 +8,7 @@ from quasarnet import io, utils
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--truth-files', type=str, required=True,
+parser.add_argument('--truth-files', nargs='+', type=str, required=True,
         help='truth file')
 
 parser.add_argument('--targets', type=str, default=None, required=False,
@@ -42,7 +42,7 @@ if args.targets is not None:
 else:
     print('INFO: No QSO targetting used.')
     w = np.ones_like(tr_dict['TARGETID']).astype('bool')
-    
+
 for k in tr_dict.keys():
     tr_dict[k] = tr_dict[k][w]
 
