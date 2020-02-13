@@ -207,8 +207,14 @@ def get_truth_fields(mode):
         truth_fields['Z_CONF'] =    'Z_CONF_PERSON'
 
     elif mode == 'DESISIM':
+        
         truth_fields['Z'] =         'TRUEZ'
         truth_fields['OBJCLASS'] =  'TRUESPECTYPE'
+        """
+        ## Needed for qq atm
+        truth_fields['Z'] =         'Z'
+        truth_fields['OBJCLASS'] =  'OBJTYPE'
+        """
 
     elif mode == None:
         truth_fields['Z'] =         ''
