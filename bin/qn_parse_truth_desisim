@@ -48,7 +48,7 @@ for k in tr_dict.keys():
 
 ## Open the drq and extract the BAL data.
 ## Rearrange it into a tid: (flag,bi) dictionary.
-bal_data = io.read_bal_data_desisim(args.truth,args.bal_templates)
+bal_data = io.read_bal_data_desisim(args.truth_files,args.bal_templates)
 
 ## Insert the BAL data into arrays to lie alongside the superset data.
 w = np.in1d(tr_dict['TARGETID'],np.array(list(bal_data.keys())))
