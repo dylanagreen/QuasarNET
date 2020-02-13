@@ -13,6 +13,8 @@ parser.add_argument("-t","--truth", type = str, required=False,nargs="*")
 parser.add_argument("-d","--data", type = str, required=True,nargs="*")
 parser.add_argument("-e","--epochs", type = int,
         required=False, default = 5)
+parser.add_argument("--boxes", type = int,
+        required=False, default = 13)
 parser.add_argument("-o","--out-prefix", type = str, required=True)
 parser.add_argument("-l","--lines", type = str,
         required=False, default = ["LYA"], nargs="*")
@@ -20,6 +22,8 @@ parser.add_argument("-b","--lines-bal", type = str,
         required=False, default = ["CIV(1548)"], nargs="*")
 parser.add_argument("--decay", type = float, required=False,
         default = 0.)
+parser.add_argument("--save-epoch-checkpoints", action='store_true',
+        default=False, required=False)
 
 args = parser.parse_args()
 
@@ -29,7 +33,8 @@ tids,X,Y,z,bal = io.read_data(args.data,truth)
 
 ## Set up the model.
 model = QuasarNET(
-        X[0,:,None].shape,
+        input_shape=X[0,:,None].shape,
+        boxes=args.boxes,
         nlines=len(args.lines)+len(args.lines_bal)
         )
 
@@ -46,18 +51,30 @@ model.compile(optimizer=adam, loss=loss, metrics=[])
 
 ## Construct the objective for the training data.
 box, sample_weight = io.objective(z,Y,bal,lines=args.lines,
-        lines_bal=args.lines_bal)
+        lines_bal=args.lines_bal,nboxes=args.boxes)
+
+## If desired, make checkpoint at each epoch.
+if args.save_epoch_checkpoints:
+    from keras.callbacks import ModelCheckpoint
+    filepath = args.out_prefix+"-epoch{epoch:03d}.h5"
+    checkpoint = ModelCheckpoint(filepath,verbose=1)
+    callbacks_list = [checkpoint]
+else:
+    callbacks_list = []
+
+print(callbacks_list)
 
 ## Fit the model using specified hyper-parameters.
 print( "starting fit")
 history = model.fit(X[:,:,None], box,
         epochs = args.epochs,
         batch_size = 256,
-        sample_weight = sample_weight)
-        #use_multiprocessing = True)
+        sample_weight = sample_weight,
+        callbacks = callbacks_list,
         #shuffle = True,
-        #validation_split = 0.2)
-        #use_multiprocessing = True)
+        #validation_split = 0.2,
+        #use_multiprocessing = True,
+        )
 
 ## Save the fitted model and printa a summary.
 model.save(args.out_prefix+".h5")
