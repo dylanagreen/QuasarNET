@@ -22,13 +22,16 @@ parser.add_argument('--targeting-bits',type=str, required=True,
 parser.add_argument('--out',type=str, required=True,
         help='output file')
 
+parser.add_argument('--verbose', action='store_true', default=False,
+                    required=False)
+
 args=parser.parse_args()
 
 ## Cycle through the spectra files, exctracting data from each one.
 fl = []
 tids = []
 nread = 0
-aux = io.read_desi_spectra_list(args.spectra,verbose=False,targeting_bits=args.targeting_bits)
+aux = io.read_desi_spectra_list(args.spectra,verbose=args.verbose,targeting_bits=args.targeting_bits)
 if aux:
     tids, spid0, spid1, spid2, fliv = aux
 else:
@@ -36,7 +39,8 @@ else:
 
 ## If we have an sdrq, filter the tids by those in sdrq.
 if args.sdrq is not None:
-    print('INFO: reading sdrq, including only spectra with targetid in sdrq.')
+    if args.verbose:
+        print('INFO: reading sdrq, including only spectra with targetid in sdrq.')
     sdrq = fitsio.FITS(args.sdrq)
     tids_sdrq = sdrq[1]['TARGETID'][:]
     sdrq.close()
@@ -46,7 +50,8 @@ if args.sdrq is not None:
     spid1 = spid1[w]
     spid2 = spid2[w]
     fliv = fliv[w,:]
-    print('INFO: done.')
+    if args.verbose:
+        print('INFO: done.')
 
 ## Define the spid components in a header.
 spid_fields= utils.get_spectrum_id_fields('DESISIM')
