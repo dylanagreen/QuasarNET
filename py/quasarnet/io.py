@@ -206,7 +206,7 @@ def read_spall(spall):
     return tid, pmf2tid
 
 ## Read the spectra files from BOSS (spplate) or DESI (desi_spectra)
-def read_spplate(fin, fibers, verbose=False):
+def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.),llmax=np.log10(10000.),dll=1.e-3):
 
     '''
     reads data from spplates
@@ -249,7 +249,7 @@ def read_spplate(fin, fibers, verbose=False):
 
     ## Construct the grids for flux and iv.
     nspec = len(fibers)
-    wave_out = utils.Wave()
+    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
     fl = np.zeros((nspec, wave_out.nbins))
     iv = np.zeros((nspec, wave_out.nbins))
 
@@ -446,6 +446,12 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'
         iv_aux = h["{}_IVAR".format(band)].read()[:,w]
         fl_aux = fl_aux[wqso][wdup]
         iv_aux = iv_aux[wqso][wdup]
+        
+        # Set NaN values of flux to zero, and make sure they have ivar zero.
+        w_nan = np.isnan(fl_aux)
+        fl_aux[w_nan] = 0.
+        iv_aux[w_nan] = 0.
+
         ivfl_aux = fl_aux*iv_aux
 
         for i,t in enumerate(tids):
@@ -484,9 +490,16 @@ def read_bal_data_desisim(truth_files,bal_templates):
     bal_templateid = []
     for f in truth_files:
         h = fitsio.FITS(f)
+
+        """
+        ## Needed for qq runs atm
+        tids.append(h['QSO_META']['TARGETID'][:])
+        bal_templateid.append(h['QSO_META']['BAL_TEMPLATEID'][:])
+        """
         tids.append(h['TRUTH_QSO']['TARGETID'][:])
         bal_templateid.append(h['TRUTH_QSO']['BAL_TEMPLATEID'][:])
         h.close()
+    
     tids = np.hstack(tids)
     bal_templateid = np.hstack(bal_templateid)
 
@@ -812,7 +825,13 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None):
         spid1 = np.array(spid1)
         spid2 = np.array(spid2)
 
-    we = X[:,443:]
+    ## Get the number of cells.
+    ncells = X.shape[1]/2.
+    assert ncells==round(ncells)
+    ncells = round(ncells)
+    print('INFO: Spectra have {} cells'.format(ncells))
+
+    we = X[:,ncells:]
     w = we.sum(axis=1)==0
     print("INFO: removing {} spectra with zero weights".format(w.sum()))
     X = X[~w]
@@ -823,9 +842,9 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None):
         spid1 = spid1[~w]
         spid2 = spid2[~w]
 
-    mdata = np.average(X[:,:443], weights = X[:,443:], axis=1)
-    sdata = np.average((X[:,:443]-mdata[:,None])**2,
-            weights = X[:,443:], axis=1)
+    mdata = np.average(X[:,:ncells], weights = X[:,ncells:], axis=1)
+    sdata = np.average((X[:,:ncells]-mdata[:,None])**2,
+            weights = X[:,ncells:], axis=1)
     sdata=np.sqrt(sdata)
 
     w = sdata == 0
@@ -840,7 +859,7 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None):
         spid1 = spid1[~w]
         spid2 = spid2[~w]
 
-    X = X[:,:443]-mdata[:,None]
+    X = X[:,:ncells]-mdata[:,None]
     X /= sdata[:,None]
 
     if truth==None:
