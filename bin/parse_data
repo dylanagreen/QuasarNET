@@ -3,6 +3,7 @@
 import numpy as np
 from quasarnet import io
 import fitsio
+#from astropy.io import fits
 import sys
 
 import argparse
@@ -15,11 +16,17 @@ parser.add_argument('--out',type=str, required=True)
 parser.add_argument('--single-exposures', action='store_true', default=False,
                     required=False)
 parser.add_argument('--spcframes',type=str, nargs="+", required=False)
+parser.add_argument('--llmin', type = float, required=False,
+                    default = np.log10(3600.))
+parser.add_argument('--llmax', type = float, required=False,
+                    default = np.log10(10000.))
+parser.add_argument('--dll', type = float, required=False,
+                    default = 1.e-3)
 
 args=parser.parse_args()
 
 if args.single_exposures & (args.spcframes is None):
-    print('INFO: No spCFrame files provided, will search in same directory as each\nspPlate file')
+    print('INFO: No spCFrame files provided, will search in same directory as each spPlate file')
     import glob
 
 ## Construct a dictionary (plate, mjd, fiberid) => thing_id
@@ -34,7 +41,7 @@ if args.sdrq is not None:
     sdrq = fitsio.FITS(args.sdrq)
     tids_sdrq = sdrq[1]['THING_ID'][:]
     print('INFO: done')
-    w = np.in1d(tids_spall, tids_sdrq) & (tids_spall>0)
+    wqso = np.in1d(tids_spall, tids_sdrq) & (tids_spall>0)
 ## Otherwise, filter by hardcoded targeting bits.
 else:
     print('getting quasars from target bits')
@@ -75,6 +82,7 @@ else:
 plate_mjd = {}
 for i,(p,m,f) in enumerate(np.array(pmf_spall)[wqso]):
     sys.stderr.write('\rINFO: populating dict: {:.1%}'.format(i/len(pmf_spall)))
+    
     k = (p,m)
     if not k in plate_mjd:
         plate_mjd[k] = []
@@ -109,67 +117,88 @@ for p,m in plate_mjd:
     # Read the spPlate file found, using the list of relevant fibers from the
     # plate_mjd dictionary.
     f = f[0]
-    print('Reading file {}, nread={}, ntot={}'.format(f,nread,len(plate_mjd)))
+    print('Reading file {}, nread={:5d}, ntot={:5d}'.format(f,nread,len(plate_mjd)),end='\r')
     nread += 1
     fibers = plate_mjd[(p,m)]
 
     if args.single_exposures:
+        ## Want to switch to astropy.io.fits here, as fitsio crashes when certain files are used.
+        ## For example, the header keyname 'EXPID**' in /global/projecta/projectdirs/sdss/data/sdss/dr13/eboss/spectro/redux/v5_9_0/6138/spPlate-6138-56598.fits
         h = fitsio.FITS(f)
-        head = h[0].read_header()
+        try:
+            head = h[0].read_header()
+        except OSError:
+            print('WARNING: problem with reading headers in {}'.format(f))
+            print('WARNING: Ignoring file')
+            continue
+
+        """
+        h = fits.open(f)
+        head = h[0].header
+        """
 
         # Choose an exposure number at random from the spPlate file.
-        exps = list(set([head[k][:11] for k in head.keys() if 'EXPID' in k]))
-        b_exp = np.random.choice([e for e in exps if e[0]=='b'],replace=False)
-        r_exp = 'r'+b_exp[1:]
+        exps = list(set([head[k][3:11] for k in head.keys() if 'EXPID' in k]))
+        exp = np.random.choice(exps)
 
-        b_fname = 'spCFrame-{}.fits'.format(b_exp)
-        if args.single_exposures & (args.spcframes is None):
-            dir = f[:f.rfind('/')+1]
-            search = glob.glob(dir+'*'+'/spCFrame*')
-            b_spcframe = [toto for toto in search if b_fname in toto]
-        else:
-            b_spcframe = [toto for toto in args.spcframes if b_fname in toto]
-        if len(b_spcframe)==0:
-            print('WARNING: spcframe file for exposure {} not found'.format(b_exp))
-            print('WARNING: ignoring file')
-            continue
-            #sys.exit(1)
-        if len(b_spcframe)>1:
-            print('WARNING: multiple files found for exposure', b_exp)
-            print('WARNING: exiting')
-            sys.exit(1)
-        b_spcframe = b_spcframe[0]
+        for s in [1,2]:
 
-        r_fname = 'spCFrame-{}.fits'.format(r_exp)
-        if args.single_exposures & (args.spcframes is None):
-            dir = f[:f.rfind('/')+1]
-            search = glob.glob(dir+'*'+'/spCFrame*')
-            r_spcframe = [toto for toto in search if r_fname in toto]
-        else:
-            r_spcframe = [toto for toto in args.spcframes if r_fname in toto]
-        if len(r_spcframe)==0:
-            print('WARNING: spcframe file for exposure {} not found'.format(r_exp))
-            print('WARNING: ignoring file')
-            continue
-            #sys.exit(1)
-        if len(r_spcframe)>1:
-            print('WARNING: multiple files found for exposure', r_exp)
-            print('WARNING: exiting')
-            sys.exit(1)
-        r_spcframe = r_spcframe[0]
+            b_fname = 'spCFrame-b{}-{}.fits'.format(s,exp)
+            if args.single_exposures & (args.spcframes is None):
+                dir = f[:f.rfind('/')+1]
+                search = glob.glob(dir+'/spCFrame*')
+                b_spcframe = [toto for toto in search if b_fname in toto]
+            else:
+                b_spcframe = [toto for toto in args.spcframes if b_fname in toto]
+            if len(b_spcframe)==0:
+                print('WARNING: spcframe file {} not found'.format(b_fname))
+                print('WARNING: ignoring file')
+                continue
+                #sys.exit(1)
+            if len(b_spcframe)>1:
+                print('WARNING: multiple files found for exposure', exp)
+                print('WARNING: exiting')
+                sys.exit(1)
+            b_spcframe = b_spcframe[0]
 
-        aux = io.read_spcframe(b_spcframe,r_spcframe,fibers)
+            r_fname = 'spCFrame-r{}-{}.fits'.format(s,exp)
+            if args.single_exposures & (args.spcframes is None):
+                dir = f[:f.rfind('/')+1]
+                search = glob.glob(dir+'/spCFrame*')
+                r_spcframe = [toto for toto in search if r_fname in toto]
+            else:
+                r_spcframe = [toto for toto in args.spcframes if r_fname in toto]
+            if len(r_spcframe)==0:
+                print('WARNING: spcframe file {} not found'.format(r_fname))
+                print('WARNING: ignoring file')
+                continue
+                #sys.exit(1)
+            if len(r_spcframe)>1:
+                print('WARNING: multiple files found for exposure', exp)
+                print('WARNING: exiting')
+                sys.exit(1)
+            r_spcframe = r_spcframe[0]
+
+            aux = io.read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False)
+            if aux is not None:
+                tids_plate = [thid_db[(p,m,fib)] for fib in aux[0]]
+                tids.append(tids_plate)
+                fl.append(aux[1])
+                plate.append([p]*len(aux[0]))
+                mjd.append([m]*len(aux[0]))
+                fibs.append(aux[0])
+        
+        h.close()
 
     else:
-        aux = io.read_spplate(f, fibers)
-
-    if aux is not None:
-        tids_plate = [thid_db[(p,m,fib)] for fib in aux[0]]
-        tids.append(tids_plate)
-        fl.append(aux[1])
-        plate.append([p]*len(aux[0]))
-        mjd.append([m]*len(aux[0]))
-        fibs.append(aux[0])
+        aux = io.read_spplate(f, fibers, verbose=False, llmin=args.llmin, llmax=args.llmax, dll=args.dll)
+        if aux is not None:
+            tids_plate = [thid_db[(p,m,fib)] for fib in aux[0]]
+            tids.append(tids_plate)
+            fl.append(aux[1])
+            plate.append([p]*len(aux[0]))
+            mjd.append([m]*len(aux[0]))
+            fibs.append(aux[0])
 
 # Concatenate all results to form single arrays.
 tids = np.concatenate(tids)
