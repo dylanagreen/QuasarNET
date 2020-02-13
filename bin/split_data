@@ -42,10 +42,6 @@ state = np.random.RandomState(seed=args.seed)
 w = state.uniform(size=nspec)
 for i in range(args.nsplits):
     w_split = ~(((1-args.training_proportion)*i<=w) * (w<(1-args.training_proportion)*(i+1)))
-    print(h[0])
-    print(h[1])
-    print(h[0][:,:][w_split,:].shape)
-    print(h[1][:][w_split].shape)
 
     ## Write the output to a fits file, with flux/iv in the primary HDU, and a
     ## catalog of objects in the 1st extension.
