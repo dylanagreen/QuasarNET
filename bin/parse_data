@@ -16,10 +16,10 @@ parser.add_argument('--out',type=str, required=True)
 parser.add_argument('--single-exposures', action='store_true', default=False,
                     required=False)
 parser.add_argument('--spcframes',type=str, nargs="+", required=False)
-parser.add_argument('--llmin', type = float, required=False,
-                    default = np.log10(3600.))
-parser.add_argument('--llmax', type = float, required=False,
-                    default = np.log10(10000.))
+parser.add_argument('--lmin', type = float, required=False,
+                    default = 3600.)
+parser.add_argument('--lmax', type = float, required=False,
+                    default = 10000.)
 parser.add_argument('--dll', type = float, required=False,
                     default = 1.e-3)
 
@@ -191,7 +191,7 @@ for p,m in plate_mjd:
         h.close()
 
     else:
-        aux = io.read_spplate(f, fibers, verbose=False, llmin=args.llmin, llmax=args.llmax, dll=args.dll)
+        aux = io.read_spplate(f, fibers, verbose=False, llmin=np.log10(args.lmin), llmax=np.log10(args.lmax), dll=args.dll)
         if aux is not None:
             tids_plate = [thid_db[(p,m,fib)] for fib in aux[0]]
             tids.append(tids_plate)
