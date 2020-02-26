@@ -432,7 +432,7 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'
 
     wave_out = utils.Wave()
 
-    bands = [x.get_extname()[0] for x in h.hdu_list if 'WAVELENGTH' in x.get_extname()]
+    bands = [x.get_extname().split('_')[0] for x in h.hdu_list if 'WAVELENGTH' in x.get_extname()]
     #["B", "R", "Z"]
     for band in bands:
         h_wave = h["{}_WAVELENGTH".format(band)].read()
