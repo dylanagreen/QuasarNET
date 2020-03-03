@@ -4,7 +4,7 @@ import numpy as np
 import fitsio
 import argparse
 
-from quasarnet import io
+from quasarnet import io, utils
 
 parser = argparse.ArgumentParser()
 
@@ -23,6 +23,8 @@ parser.add_argument('--mode', type=str, help='mode for file format',
 args = parser.parse_args()
 
 tid2truth, spid2tid, cols, colnames = io.read_sdrq(args.sdrq,mode=args.mode)
+
+tid_field = utils.get_tid_field(args.mode)
 
 ## Open the drq and extract the BAL data.
 ## Rearrange it into a tid: (flag,bi) dictionary.

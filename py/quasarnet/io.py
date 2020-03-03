@@ -55,8 +55,8 @@ def read_sdrq(sdrq, mode='BOSS'):
     objclass_codes = codify_objclass(data['OBJCLASS'],mode)
     data['OBJCLASS'] = objclass_codes
 
-    zconf_codes = codify_zconf(data['Z_CONF'],'DESISIM')
-    data['Z_CONf'] = zconf_codes
+    zconf_codes = codify_zconf(data['Z_CONF'],mode)
+    data['Z_CONF'] = zconf_codes
 
     ## Construct dictionaries {targetid: class, z_conf, z}, and
     ## {(spid0, spid1, spid2): targetid}.
@@ -586,7 +586,7 @@ def codify_objclass(objclass,mode):
         w = np.any(w,axis=0)
         objclass_codes[w] = k
 
-    return objclass_codes
+    return objclass_codes.astype('i4')
 
 def codify_zconf(zconf,mode):
 
@@ -602,7 +602,7 @@ def codify_zconf(zconf,mode):
         w = np.any(w,axis=0)
         zconf_codes[w] = k
 
-    return zconf_codes
+    return zconf_codes.astype('i4')
 
 ## ??
 def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
