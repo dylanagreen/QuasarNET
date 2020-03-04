@@ -176,8 +176,8 @@ def get_spectrum_id_fields(mode):
         spid_fields['SPID2'] = 'FIBERID'
 
     elif mode == 'DESI':
-        spid_fields['SPID0'] = 'FIBER'#'TILEID'
-        spid_fields['SPID1'] = 'FIBER'#'NIGHT'
+        spid_fields['SPID0'] = 'TILEID'
+        spid_fields['SPID1'] = 'NIGHT'
         spid_fields['SPID2'] = 'FIBER'
 
     elif mode == 'DESISIM':

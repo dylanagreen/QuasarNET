@@ -424,13 +424,13 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARG
     spid1 = spid1[wdup]
     spid2 = spid2[wdup]
 
+    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)    
+    
     nspec = len(tids)
-    fl = np.zeros((nspec, nbins))
-    iv = np.zeros((nspec, nbins))
+    fl = np.zeros((nspec, wave_out.nbins))
+    iv = np.zeros((nspec, wave_out.nbins))
 
     if nspec == 0: return None
-
-    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
 
     bands = [x.get_extname().split('_')[0] for x in h.hdu_list if 'WAVELENGTH' in x.get_extname()]
     for band in bands:
