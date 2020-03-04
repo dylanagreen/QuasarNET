@@ -24,6 +24,12 @@ parser.add_argument("--decay", type = float, required=False,
         default = 0.)
 parser.add_argument("--save-epoch-checkpoints", action='store_true',
         default=False, required=False)
+parser.add_argument('--lmin', type = float, required=False,
+        default = 3600.)
+parser.add_argument('--lmax', type = float, required=False,
+        default = 10000.)
+parser.add_argument('--dll', type = float, required=False,
+        default = 1.e-3)
 
 args = parser.parse_args()
 
@@ -51,7 +57,8 @@ model.compile(optimizer=adam, loss=loss, metrics=[])
 
 ## Construct the objective for the training data.
 box, sample_weight = io.objective(z,Y,bal,lines=args.lines,
-        lines_bal=args.lines_bal,nboxes=args.boxes)
+        lines_bal=args.lines_bal,nboxes=args.boxes,llmin=np.log10(args.lmin),
+        llmax=np.log10(args.lmax),dll=args.dll)
 
 ## If desired, make checkpoint at each epoch.
 if args.save_epoch_checkpoints:
