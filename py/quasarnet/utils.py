@@ -176,13 +176,13 @@ def get_spectrum_id_fields(mode):
         spid_fields['SPID2'] = 'FIBERID'
 
     elif mode == 'DESI':
-        spid_fields['SPID0'] = 'TILEID'
-        spid_fields['SPID1'] = 'NIGHT'
+        spid_fields['SPID0'] = 'FIBER'#'TILEID'
+        spid_fields['SPID1'] = 'FIBER'#'NIGHT'
         spid_fields['SPID2'] = 'FIBER'
 
     elif mode == 'DESISIM':
-        spid_fields['SPID0'] = 'TILEID'
-        spid_fields['SPID1'] = 'NIGHT'
+        spid_fields['SPID0'] = 'FIBER'#'TILEID'
+        spid_fields['SPID1'] = 'FIBER'#'NIGHT'
         spid_fields['SPID2'] = 'FIBER'
 
     elif mode == None:
@@ -245,15 +245,20 @@ def get_bal_fields(mode):
 
     return bal_fields
 
-def get_quasar_mask(verbose=True):
+def get_quasar_mask(verbose=True,period='survey'):
 
     try:
-        from desitarget import desi_mask
-        quasar_mask = desi_mask.mask('QSO')
-    except:
+        import desitarget
+        if period=='survey':
+            quasar_mask = desitarget.targetmask.desi_mask.mask('QSO')
+        elif period=='sv':
+            quasar_mask = desitarget.sv1.sv1_targetmask.desi_mask.mask('QSO')
+        elif period=='cmx':
+            quasar_mask = desitarget.cmx.cmx_targetmask.cmx_mask.mask('MINI_SV_QSO')
+    except ImportError:
         if verbose:
             print("WARN: can't load desi_mask, using hardcoded targetting value!")
-        quasar_mask = 2**2
+        quasar_mask = 2**55
 
     return quasar_mask
 
@@ -320,6 +325,19 @@ def get_zconf_codes(mode):
         class_codes[2] = [4]
 
     return class_codes
+
+def get_desi_targeting_bit_col(period):
+
+    if period == 'survey':
+        targeting_bit_col = 'DESI_TARGET'
+    elif period == 'sv':
+        targeting_bit_col = 'SV1_DESI_TARGET'
+    elif period == 'cmx':
+        targeting_bit_col = 'CMX_TARGET'
+    else:
+        raise ValueError('DESI period {} not recognised.'.format(period)) 
+
+    return targeting_bit_col
 
 # TODO: move this?
 absorber_IGM = {
