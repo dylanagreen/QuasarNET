@@ -940,9 +940,9 @@ def get_Y(objclass,z,z_conf,qso_zlim=2.1):
 # TODO: should this go in utils maybe?
 from .utils import absorber_IGM
 from scipy.interpolate import interp1d
-def box_offset(z, line='LYA', nboxes = 13):
+def box_offset(z, line='LYA', nboxes = 13, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
 
-    wave = utils.Wave()
+    wave = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
 
     ## Interpolate the locations of the line in each object in terms of
     ## wavelength to the position in terms of the number of boxes.
@@ -964,14 +964,14 @@ def box_offset(z, line='LYA', nboxes = 13):
     return box, offset, weights
 
 # TODO: is this the right place for this?
-def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13):
+def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
 
     box=[]
     sample_weight = []
     for l in lines:
         # TODO: Do we need to use "weight_line"?
         box_line, offset_line, weight_line = box_offset(z,
-                line = l, nboxes=nboxes)
+                line = l, nboxes=nboxes, llmin=llmin, llmax=llmax, dll=dll)
 
         w = (Y.argmax(axis=1)==2) | (Y.argmax(axis=1)==3)
         ## set to zero where object is not a QSO
@@ -982,7 +982,7 @@ def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13):
 
     for l in lines_bal:
         box_line, offset_line, weight_line = box_offset(z,
-                line = l, nboxes=nboxes)
+                line = l, nboxes=nboxes, llmin=llmin, llmax=llmax, dll=dll)
 
         ## set to zero for non-quasars
         wqso = (Y.argmax(axis=1)==2) | (Y.argmax(axis=1)==3)
