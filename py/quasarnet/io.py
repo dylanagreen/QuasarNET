@@ -289,7 +289,7 @@ def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.),llmax=np.log1
 
     return fids, fl
 
-def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, targeting_bits='DESI_TARGET'):
+def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey'):
 
     '''
     reads data from DESI spectra files (per HEALPix pixel)
@@ -298,7 +298,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, targetin
         fin -- list of spectra files to read
         ignore_quasar_mask -- include all spectra, not just quasar targets
         verbose -- chatty or not
-        targeting_bits -- which targeting bits to use
+        period -- which period of DESI are we in (decides which targeting bits to use)
 
     Returns:
         meta -- dictionary of metadata
@@ -309,10 +309,12 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, targetin
     if ignore_quasar_mask:
         quasar_mask = None
     else:
-        quasar_mask = utils.get_quasar_mask(verbose=verbose)
-
+        quasar_mask = utils.get_quasar_mask(verbose=verbose,period=period)
+    
     if not isinstance(fin,list):
         fin = [fin]
+
+    targeting_bit_col = utils.get_desi_targeting_bit_col(period)
 
     tids_list = []
     spid0_list = []
@@ -325,7 +327,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, targetin
 
     for i,f in enumerate(fin):
 
-        aux = read_desi_spectra(f, quasar_mask, verbose=verbose, targeting_bits=targeting_bits)
+        aux = read_desi_spectra(f, quasar_mask, verbose=verbose, targeting_bit_col=targeting_bit_col)
 
         if aux:
             tids, spid0, spid1, spid2, fl, iv = aux
@@ -380,18 +382,17 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, targetin
         print('WARN: no quasar spectra found in given file list.')
         return None
 
-def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bits='DESI_TARGET'):
+def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARGET'):
 
     tid_field = utils.get_tid_field('DESI')
     spid_fields = utils.get_spectrum_id_fields('DESI')
 
     h = fitsio.FITS(f)
 
-    #wqso = ((h[1][targeting_bits][:] & quasar_mask)>0)
     if quasar_mask is not None:
-        wqso = ((h[1][targeting_bits][:] & quasar_mask)>0)
+        wqso = ((h[1][targeting_bit_col][:] & quasar_mask)>0)
     else:
-        wqso = np.ones_like(h[1][targeting_bits][:]).astype('bool')
+        wqso = np.ones_like(h[1][targeting_bit_col][:]).astype('bool')
 
     nspec_init = wqso.sum()
     if nspec_init == 0: return None
@@ -558,15 +559,16 @@ def read_truth_desisim(truth_files):
 
     return tr_dict
 
-def read_targets_desisim(targets,targeting_bits):
+def read_targets_desisim(targets,period):
 
     tid_field = utils.get_tid_field('DESISIM')
+    targeting_bit_col = utils.get_desi_targeting_bit_col(period)
 
     h = fitsio.FITS(targets)
 
     ta_dict = {}
     ta_dict[tid_field['TARGETID']] = h[1][tid_field['TARGETID']][:]
-    ta_dict[targeting_bits] = h[1][targeting_bits][:]
+    ta_dict[targeting_bit_col] = h[1][targeting_bit_col][:]
 
     h.close()
 
