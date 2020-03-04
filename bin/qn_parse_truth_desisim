@@ -17,9 +17,9 @@ parser.add_argument('--targets', type=str, default=None, required=False,
 parser.add_argument('--bal-templates', type=str, default=None, required=False,
         help='BAL templates file')
 
-parser.add_argument('--targeting-bits',type=str, required=False,
-        choices=['DESI_TARGET','SV1_DESI_TARGET'],
-        help='which targeting bits to use')
+parser.add_argument('--desi-period',type=str, required=False, default='survey',
+        choices=['survey','sv','cmx'],
+        help='which period of desi are we in (determines targetting bits)')
 
 parser.add_argument('--ignore-target-mask', action='store_true', default=False,
                     required=False)
@@ -41,7 +41,7 @@ tr_dict = io.read_truth_desisim(args.truth_files)
 
 ## If targets file provided, filter to only include QSO targets.
 if args.targets is not None:
-    ta_dict = io.read_targets_desisim(args.targets,args.targeting_bits)
+    ta_dict = io.read_targets_desisim(args.targets,args.desi_period)
     w_ta = (ta_dict[args.targeting_bits] & quasar_mask)>0
     print('INFO: {} objects are QSO targets (out of {})'.format(w_ta.sum(),len(w_ta)))
     w = np.in1d(tr_dict['TARGETID'],ta_dict['TARGETID'][w_ta])
