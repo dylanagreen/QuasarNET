@@ -207,7 +207,7 @@ def get_truth_fields(mode):
         truth_fields['Z_CONF'] =    'Z_CONF_PERSON'
 
     elif mode == 'DESISIM':
-        
+
         truth_fields['Z'] =         'TRUEZ'
         truth_fields['OBJCLASS'] =  'TRUESPECTYPE'
         """
@@ -258,7 +258,12 @@ def get_quasar_mask(verbose=True,period='survey'):
     except ImportError:
         if verbose:
             print("WARN: can't load desi_mask, using hardcoded targetting value!")
-        quasar_mask = 2**55
+        if period=='survey':
+            quasar_mask = 2**2
+        elif period=='sv':
+            quasar_mask = 2**2
+        elif period=='cmx':
+            quasar_mask = 2**55
 
     return quasar_mask
 
@@ -335,7 +340,7 @@ def get_desi_targeting_bit_col(period):
     elif period == 'cmx':
         targeting_bit_col = 'CMX_TARGET'
     else:
-        raise ValueError('DESI period {} not recognised.'.format(period)) 
+        raise ValueError('DESI period {} not recognised.'.format(period))
 
     return targeting_bit_col
 
