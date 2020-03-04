@@ -289,7 +289,7 @@ def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.),llmax=np.log1
 
     return fids, fl
 
-def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey'):
+def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey', llmin=3600., llmax=9800., dll=1.e-3):
 
     '''
     reads data from DESI spectra files (per HEALPix pixel)
@@ -327,7 +327,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='
 
     for i,f in enumerate(fin):
 
-        aux = read_desi_spectra(f, quasar_mask, verbose=verbose, targeting_bit_col=targeting_bit_col)
+        aux = read_desi_spectra(f, quasar_mask, verbose=verbose, targeting_bit_col=targeting_bit_col, llmin=llmin, llmax=llmax, dll=dll)
 
         if aux:
             tids, spid0, spid1, spid2, fl, iv = aux
@@ -382,7 +382,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='
         print('WARN: no quasar spectra found in given file list.')
         return None
 
-def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARGET'):
+def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARGET', llmin=3600., llmax=9800., dll=1.e-3):
 
     tid_field = utils.get_tid_field('DESI')
     spid_fields = utils.get_spectrum_id_fields('DESI')
@@ -431,10 +431,9 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARG
 
     if nspec == 0: return None
 
-    wave_out = utils.Wave()
+    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
 
     bands = [x.get_extname().split('_')[0] for x in h.hdu_list if 'WAVELENGTH' in x.get_extname()]
-    #["B", "R", "Z"]
     for band in bands:
         h_wave = h["{}_WAVELENGTH".format(band)].read()
 
@@ -447,7 +446,7 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARG
         iv_aux = h["{}_IVAR".format(band)].read()[:,w]
         fl_aux = fl_aux[wqso][wdup]
         iv_aux = iv_aux[wqso][wdup]
-        
+
         # Set NaN values of flux to zero, and make sure they have ivar zero.
         w_nan = np.isnan(fl_aux)
         fl_aux[w_nan] = 0.
@@ -500,7 +499,7 @@ def read_bal_data_desisim(truth_files,bal_templates):
         tids.append(h['TRUTH_QSO']['TARGETID'][:])
         bal_templateid.append(h['TRUTH_QSO']['BAL_TEMPLATEID'][:])
         h.close()
-    
+
     tids = np.hstack(tids)
     bal_templateid = np.hstack(bal_templateid)
 
@@ -532,7 +531,7 @@ def read_truth_desisim(truth_files):
     for f in truth_files:
 
         h = fitsio.FITS(f)
-        
+
         tr_dict[tid_field['TARGETID']].append(h[1][tid_field['TARGETID']][:])
         for k in truth_fields.keys():
             tr_dict[k].append(h[1][truth_fields[k]][:])
