@@ -289,7 +289,7 @@ def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.),llmax=np.log1
 
     return fids, fl
 
-def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey', llmin=3600., llmax=9800., dll=1.e-3):
+def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey', llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
 
     '''
     reads data from DESI spectra files (per HEALPix pixel)
@@ -310,7 +310,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='
         quasar_mask = None
     else:
         quasar_mask = utils.get_quasar_mask(verbose=verbose,period=period)
-    
+
     if not isinstance(fin,list):
         fin = [fin]
 
@@ -381,7 +381,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='
         print('WARN: no quasar spectra found in given file list.')
         return None
 
-def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARGET', llmin=3600., llmax=9800., dll=1.e-3):
+def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARGET', llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
 
     tid_field = utils.get_tid_field('DESI')
     spid_fields = utils.get_spectrum_id_fields('DESI')
