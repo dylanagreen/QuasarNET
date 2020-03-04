@@ -374,8 +374,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='
         fl = np.concatenate(fl_list,axis=0)
         iv = np.concatenate(iv_list,axis=0)
         fliv = np.hstack((fl,iv))
-        if verbose:
-            print("INFO: found {} good spectra".format(nspec))
+        print("INFO: found {} good spectra".format(nspec))
         return tids, spid0, spid1, spid2, fliv
 
     else:
