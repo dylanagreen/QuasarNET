@@ -2,7 +2,7 @@ from scipy.interpolate import interp1d
 from numpy import zeros, arange, array
 import numpy as np
 
-def process_preds(preds, lines, lines_bal):
+def process_preds(preds, lines, lines_bal, wave=None):
     '''
     Convert network predictions to c_lines, z_lines and z_best
 
@@ -43,7 +43,7 @@ def process_preds(preds, lines, lines_bal):
 
     # For each line, fill in the output array. Done for all spectra at once.
     for il in range(len(lines)):
-        c_line[il], z_line[il] = line_preds_to_properties(preds[il],lines[il])
+        c_line[il], z_line[il] = line_preds_to_properties(preds[il],lines[il],wave=wave)
 
         """
         ## Rest frame wavelength of line.
@@ -66,7 +66,7 @@ def process_preds(preds, lines, lines_bal):
     z_line_bal=zeros((nlines_bal, nspec))
 
     for il in range(len(lines_bal)):
-        c_line_bal[il], z_line_bal[il] = line_preds_to_properties(preds[nlines+il],lines_bal[il])
+        c_line_bal[il], z_line_bal[il] = line_preds_to_properties(preds[nlines+il],lines_bal[il],wave=wave)
 
         """
         l = absorber_IGM[lines_bal[il]]
@@ -78,7 +78,7 @@ def process_preds(preds, lines, lines_bal):
 
     return c_line, z_line, zbest, c_line_bal, z_line_bal
 
-def line_preds_to_properties(line_preds,line):
+def line_preds_to_properties(line_preds,line,wave=None):
     '''
     Convert network predictions for 1 line to c_line, z_line.
 
@@ -101,7 +101,10 @@ def line_preds_to_properties(line_preds,line):
 
     # Construct an interpolator to go from the index along a wave vector to the
     # wavelength associated with this position.
-    wave = Wave()
+    if wave is None:
+        print('WARN: No wave grid information provided; using default:')
+        wave = Wave()
+        print('      - lmin={}, lmax={}, dll={}'.format(10**wave.llmin,10**wave.llmax,wave.dll))
     i_to_wave = interp1d(arange(len(wave.wave_grid)), wave.wave_grid,
             bounds_error=False, fill_value='extrapolate')
 

@@ -7,7 +7,7 @@ from quasarnet.io import read_data
 from scipy.interpolate import interp1d
 from numpy import in1d, array
 from quasarnet.io import read_data
-from quasarnet.utils import absorber_IGM, process_preds
+from quasarnet.utils import absorber_IGM, process_preds, Wave
 import fitsio
 import argparse
 import numpy as np
@@ -21,6 +21,15 @@ parser.add_argument('--data',type=str,required=True,nargs="*",
 
 parser.add_argument('--data-training',type=str,required=True,
         help='the data used for training')
+
+parser.add_argument('--lmin', type = float, required=False,
+                    default = 3600.)
+
+parser.add_argument('--lmax', type = float, required=False,
+                    default = 10000.)
+
+parser.add_argument('--dll', type = float, required=False,
+                    default = 1.e-3)
 
 parser.add_argument('--spall',type=str,required=True,
         help='the spall file (same pipeline version as the --data')
@@ -57,8 +66,9 @@ print('predicting...')
 aux = model.predict(X[:,:,None])
 print('prediction done')
 
+wave = Wave(llmin=np.log10(args.lmin),llmax=np.log10(args.lmax),dll=args.dll)
 c_line,z_line,zbest,c_line_bal,z_line_bal =\
-        process_preds(aux, args.lines, args.lines_bal)
+        process_preds(aux, args.lines, args.lines_bal,wave=wave)
 
 isqso = (c_line>args.c_th).sum(axis=0)>=args.n_th
 
