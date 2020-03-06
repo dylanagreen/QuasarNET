@@ -14,12 +14,6 @@ from quasarnet import utils
 # Made a class utils.Wave to replace this. Has these llmin/llmax/dll as
 # default but can add functionality to overwrite this with relative ease. Left
 # without for now to avoid any potential issues.
-llmin = np.log10(3600)
-llmax = np.log10(10000)
-dll = 1e-3
-nbins = int((llmax-llmin)/dll)
-wave = 10**(llmin + np.arange(nbins)*dll)
-nmasked_max = len(wave)+1
 
 ################################################################################
 ## Read raw data to be parsed.
