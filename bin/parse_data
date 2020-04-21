@@ -22,6 +22,16 @@ parser.add_argument('--lmax', type = float, required=False,
                     default = 10000.)
 parser.add_argument('--dll', type = float, required=False,
                     default = 1.e-3)
+parser.add_argument('--mode', type = str, required=False, default='BOSS',
+                    options=['BOSS','DESI','DESI_SPECTRA','DESI_COADD','DESI_SIM'])
+parser.add_argument('--use-best-exposure', action='store_true', default=False,
+                    required=False)
+parser.add_argument('--use-random-exposure', action='store_true', default=False,
+                    required=False)
+parser.add_argument('--random-seed', type = int, required=False,
+                    default = 0)
+parser.add_argument('--verbose', action='store_true', default=False,
+                    required=False)
 
 args=parser.parse_args()
 
@@ -45,16 +55,7 @@ if args.sdrq is not None:
 ## Otherwise, filter by hardcoded targeting bits.
 else:
     print('getting quasars from target bits')
-    tb = {'BOSS_TARGET1':[10,11,12,13,14,15,16,17,18,19,40,41,42,43,44],
-        'EBOSS_TARGET0':[10,11,12,13,14,15,16,17,18,20,22,30,31,33,34,35,40],
-        'EBOSS_TARGET1':[9,10,11,12,13,14,15,16,17,18,30,31],
-        'EBOSS_TARGET2':[0,2,4,20,21,23,24,25,26,27,31,32,33,34,50,51,
-            52,53,54,55,56,57,58,59,60,61,62],
-        'ANCILLARY_TARGET1':[6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,22,
-            23,24,25,26,27,28,29,30,31,50,51,52,53,54,55,58,59],
-        'ANCILLARY_TARGET2':[0,1,2,3,4,5,7,8,9,10,13,14,15,24,
-            25,26,27,31,32,33,53,54,55,56]
-        }
+    tb = utils.get_targeting_bits(args.mode,verbose=args.verbose,desi_period=desi_period,cmx_bitname=args.desi_cmx_bitname)
 
     # Open the spall file to extract further information.
     spall = fitsio.FITS(args.spall)
@@ -82,7 +83,7 @@ else:
 plate_mjd = {}
 for i,(p,m,f) in enumerate(np.array(pmf_spall)[wqso]):
     sys.stderr.write('\rINFO: populating dict: {:.1%}'.format(i/len(pmf_spall)))
-    
+
     k = (p,m)
     if not k in plate_mjd:
         plate_mjd[k] = []
@@ -121,84 +122,31 @@ for p,m in plate_mjd:
     nread += 1
     fibers = plate_mjd[(p,m)]
 
+    # Read data, either directly from the spPlate file or via spCFrame files.
     if args.single_exposures:
-        ## Want to switch to astropy.io.fits here, as fitsio crashes when certain files are used.
-        ## For example, the header keyname 'EXPID**' in /global/projecta/projectdirs/sdss/data/sdss/dr13/eboss/spectro/redux/v5_9_0/6138/spPlate-6138-56598.fits
-        h = fitsio.FITS(f)
-        try:
-            head = h[0].read_header()
-        except OSError:
-            print('WARNING: problem with reading headers in {}'.format(f))
-            print('WARNING: Ignoring file')
-            continue
+        # If no method of choosing an exposure is specified, use random.
+        if (~args.use_best_exposure) and (~args.use_random_exposure):
+            print('INFO: Using random exposure with seed {}'.format(args.random_seed))
+            args.use_random_exposure = True
 
-        """
-        h = fits.open(f)
-        head = h[0].header
-        """
-
-        # Choose an exposure number at random from the spPlate file.
-        exps = list(set([head[k][3:11] for k in head.keys() if 'EXPID' in k]))
-        exp = np.random.choice(exps)
-
-        for s in [1,2]:
-
-            b_fname = 'spCFrame-b{}-{}.fits'.format(s,exp)
-            if args.single_exposures & (args.spcframes is None):
-                dir = f[:f.rfind('/')+1]
-                search = glob.glob(dir+'/spCFrame*')
-                b_spcframe = [toto for toto in search if b_fname in toto]
-            else:
-                b_spcframe = [toto for toto in args.spcframes if b_fname in toto]
-            if len(b_spcframe)==0:
-                print('WARNING: spcframe file {} not found'.format(b_fname))
-                print('WARNING: ignoring file')
-                continue
-                #sys.exit(1)
-            if len(b_spcframe)>1:
-                print('WARNING: multiple files found for exposure', exp)
-                print('WARNING: exiting')
-                sys.exit(1)
-            b_spcframe = b_spcframe[0]
-
-            r_fname = 'spCFrame-r{}-{}.fits'.format(s,exp)
-            if args.single_exposures & (args.spcframes is None):
-                dir = f[:f.rfind('/')+1]
-                search = glob.glob(dir+'/spCFrame*')
-                r_spcframe = [toto for toto in search if r_fname in toto]
-            else:
-                r_spcframe = [toto for toto in args.spcframes if r_fname in toto]
-            if len(r_spcframe)==0:
-                print('WARNING: spcframe file {} not found'.format(r_fname))
-                print('WARNING: ignoring file')
-                continue
-                #sys.exit(1)
-            if len(r_spcframe)>1:
-                print('WARNING: multiple files found for exposure', exp)
-                print('WARNING: exiting')
-                sys.exit(1)
-            r_spcframe = r_spcframe[0]
-
-            aux = io.read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False)
-            if aux is not None:
-                tids_plate = [thid_db[(p,m,fib)] for fib in aux[0]]
-                tids.append(tids_plate)
-                fl.append(aux[1])
-                plate.append([p]*len(aux[0]))
-                mjd.append([m]*len(aux[0]))
-                fibs.append(aux[0])
-        
-        h.close()
-
+        aux = read_single_exposure(f, fibers, verbose=args.verbose,
+            best_exp=args.use_best_exposure,
+            random_exp=args.use_random_exposure, random_seed=args.random_seed,
+            llmin=np.log10(args.lmin), llmax=np.log10(args.lmax), dll=args.dll,
+            )
     else:
-        aux = io.read_spplate(f, fibers, verbose=False, llmin=np.log10(args.lmin), llmax=np.log10(args.lmax), dll=args.dll)
-        if aux is not None:
-            tids_plate = [thid_db[(p,m,fib)] for fib in aux[0]]
-            tids.append(tids_plate)
-            fl.append(aux[1])
-            plate.append([p]*len(aux[0]))
-            mjd.append([m]*len(aux[0]))
-            fibs.append(aux[0])
+        aux = io.read_spplate(f, fibers, verbose=args.verbose,
+            llmin=np.log10(args.lmin), llmax=np.log10(args.lmax), dll=args.dll,
+            )
+
+    # If data is read, add it to the data structures.
+    if aux is not None:
+        tids_plate = [thid_db[(p,m,fib)] for fib in aux[0]]
+        tids.append(tids_plate)
+        fl.append(aux[1])
+        plate.append([p]*len(aux[0]))
+        mjd.append([m]*len(aux[0]))
+        fibs.append(aux[0])
 
 # Concatenate all results to form single arrays.
 tids = np.concatenate(tids)

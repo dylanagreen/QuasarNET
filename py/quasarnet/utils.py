@@ -104,7 +104,7 @@ def line_preds_to_properties(line_preds,line,wave=None):
     if wave is None:
         print('WARN: No wave grid information provided; using default:')
         wave = Wave()
-        print('      - lmin={}, lmax={}, dll={}'.format(10**wave.llmin,10**wave.llmax,wave.dll))
+        print(' - lmin={}, lmax={}, dll={}'.format(10**wave.llmin,10**wave.llmax,wave.dll))
     i_to_wave = interp1d(arange(len(wave.wave_grid)), wave.wave_grid,
             bounds_error=False, fill_value='extrapolate')
 
@@ -158,10 +158,10 @@ def get_tid_field(mode):
     if mode == 'BOSS':
         tid_field['TARGETID'] = 'THING_ID'
 
-    elif mode == 'DESI':
+    elif (mode == 'DESI') or (mode == 'DESI_SPECTRA') or (mode == 'DESI_SIM'):
         tid_field['TARGETID'] = 'TARGETID'
 
-    elif mode == 'DESISIM':
+    elif mode == 'DESI_COADD':
         tid_field['TARGETID'] = 'TARGETID'
 
     elif mode == None:
@@ -178,14 +178,14 @@ def get_spectrum_id_fields(mode):
         spid_fields['SPID1'] = 'MJD'
         spid_fields['SPID2'] = 'FIBERID'
 
-    elif mode == 'DESI':
+    elif (mode == 'DESI') or (mode == 'DESI_SPECTRA') or (mode == 'DESI_SIM'):
         spid_fields['SPID0'] = 'TILEID'
         spid_fields['SPID1'] = 'NIGHT'
         spid_fields['SPID2'] = 'FIBER'
 
-    elif mode == 'DESISIM':
-        spid_fields['SPID0'] = 'FIBER'#'TILEID'
-        spid_fields['SPID1'] = 'FIBER'#'NIGHT'
+    elif mode == 'DESI_COADD':
+        spid_fields['SPID0'] = 'BRICKNAME'
+        spid_fields['SPID1'] = 'BRICK_OBJID'
         spid_fields['SPID2'] = 'FIBER'
 
     elif mode == None:
@@ -204,12 +204,12 @@ def get_truth_fields(mode):
         truth_fields['OBJCLASS'] =  'CLASS_PERSON'
         truth_fields['Z_CONF'] =    'Z_CONF_PERSON'
 
-    elif mode == 'DESI':
+    elif (mode == 'DESI') or (mode == 'DESI_SPECTRA') or (mode == 'DESI_SIM'):
         truth_fields['Z'] =         'Z_VI'
         truth_fields['OBJCLASS'] =  'CLASS_PERSON'
         truth_fields['Z_CONF'] =    'Z_CONF_PERSON'
 
-    elif mode == 'DESISIM':
+    elif mode == 'DESI_SIM':
 
         truth_fields['Z'] =         'TRUEZ'
         truth_fields['OBJCLASS'] =  'TRUESPECTYPE'
@@ -234,11 +234,11 @@ def get_bal_fields(mode):
         bal_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
         bal_fields['BI_CIV'] =   'BI_CIV'
 
-    elif mode == 'DESI':
+    elif mode == (mode == 'DESI') or (mode == 'DESI_SPECTRA') or (mode == 'DESI_SIM'):
         bal_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
         bal_fields['BI_CIV'] =   'BI_CIV'
 
-    elif mode == 'DESISIM':
+    elif mode == 'DESI_SIM':
         bal_fields['BAL_FLAG'] = 'BAL_FLAG_VI'
         bal_fields['BI_CIV'] =   'BI_CIV'
 
@@ -248,27 +248,57 @@ def get_bal_fields(mode):
 
     return bal_fields
 
-def get_quasar_mask(verbose=True,period='survey'):
+def get_targeting_bits(mode,verbose=True,desi_period='survey',desi_cmx_bitname=None):
 
-    try:
-        import desitarget
-        if period=='survey':
-            quasar_mask = desitarget.targetmask.desi_mask.mask('QSO')
-        elif period=='sv':
-            quasar_mask = desitarget.sv1.sv1_targetmask.desi_mask.mask('QSO')
-        elif period=='cmx':
-            quasar_mask = desitarget.cmx.cmx_targetmask.cmx_mask.mask('MINI_SV_QSO')
-    except ImportError:
-        if verbose:
-            print("WARN: can't load desi_mask, using hardcoded targetting value!")
-        if period=='survey':
-            quasar_mask = 2**2
-        elif period=='sv':
-            quasar_mask = 2**2
-        elif period=='cmx':
-            quasar_mask = 2**55
+    if mode =='BOSS':
+        tb = {'BOSS_TARGET1': [10,11,12,13,14,15,16,17,18,19,40,41,42,43,44],
+              'EBOSS_TARGET0': [10,11,12,13,14,15,16,17,18,20,22,30,31,33,34,35,40],
+              'EBOSS_TARGET1': [9,10,11,12,13,14,15,16,17,18,30,31],
+              'EBOSS_TARGET2': [0,2,4,20,21,23,24,25,26,27,31,32,33,34,50,51,
+                52,53,54,55,56,57,58,59,60,61,62],
+              'ANCILLARY_TARGET1': [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,22,
+                23,24,25,26,27,28,29,30,31,50,51,52,53,54,55,58,59],
+              'ANCILLARY_TARGET2': [0,1,2,3,4,5,7,8,9,10,13,14,15,24,
+                25,26,27,31,32,33,53,54,55,56]
+              }
 
-    return quasar_mask
+    elif 'DESI' in mode:
+        try:
+            import desitarget
+            if desi_period=='survey':
+                b = np.log2(desitarget.targetmask.desi_mask.mask('QSO')).astype('int')
+                tb = {'DESI_TARGET': b,
+                      }
+            elif desi_period=='sv':
+                b = np.log2(desitarget.sv1.sv1_targetmask.desi_mask.mask('QSO')).astype('int')
+                tb = {'SV1_DESI_TARGET': b,
+                      }
+            elif desi_period=='cmx':
+                b = np.log2(desitarget.targetmask.desi_mask.mask(desi_cmx_bitname)).astype('int')
+                tb = {'CMX_TARGET': b,
+                      }
+
+        except ImportError:
+            if verbose:
+                print("WARN: can't load desi_mask, using hardcoded targeting value!")
+            if desi_period=='survey':
+                tb = {'DESI_TARGET': 2,
+                      }
+            elif desi_period=='sv':
+                tb = {'SV1_DESI_TARGET': 2,
+                      }
+            elif desi_period=='cmx':
+                if desi_cmx_bitname=='MINI_SV_QSO':
+                    b = 12
+                elif desi_cmx_bitname=='SV0_QSO'
+                    b = 55
+                else:
+                    print('ERROR: cmx bit name {} not found, using SV0_QSO'.format(cmx_bitname))
+                    b = 55
+                tb = {'CMX_TARGET': b,
+                      }
+
+    return tb
 
 def get_class_codes(mode):
 

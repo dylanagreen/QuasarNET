@@ -65,7 +65,7 @@ def read_sdrq(sdrq, mode='BOSS'):
     return tid2truth, spid2tid, cols, colnames
 
 ## spcframe = individual exposures of spectra
-def read_spcframe(b_spcframe,r_spcframe,fibers, verbose=False):
+def read_spcframe(b_spcframe,r_spcframe,fibers,verbose=False):
 
     '''
     reads data from spcframes
@@ -200,18 +200,23 @@ def read_spall(spall):
     return tid, pmf2tid
 
 ## Read the spectra files from BOSS (spplate) or DESI (desi_spectra)
-def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.),llmax=np.log10(10000.),dll=1.e-3):
+def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
 
     '''
-    reads data from spplates
+    Given an spPlate file, returns spectra, interpolated onto a new wavelength
+    grid.
 
-    Arguments:
-        fin -- spplate file to read
-        fibers -- list of fiberids
-
-    Returns:
-        fids -- fiberids ?
-        fl -- flux/iv ?
+    input:
+        -- fin: path to spplate file to read
+        -- fibers: list of fiberids to read
+        -- verbose: whether to print debugging statements or not
+        -- llmin: min value of log10(wavelength) to use in wavelength grid
+        -- llmax: max value of log10(wavelength) to use in wavelength grid
+        -- dll: value of distance between log10(wavelength) pixels to use in
+            wavelength grid
+    output: thid, data
+        -- fids: list of fiberids in output
+        -- data: flux/iv
     '''
 
     ## Open the file and read data from the header.
@@ -282,6 +287,174 @@ def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.),llmax=np.log1
     fids = fids[~w]
 
     return fids, fl
+
+## ??
+def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=False, random_seed=0, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
+    '''
+    Given an spPlate file, returns spectra from one exposure that went into
+    that file, interpolated onto a new wavelength grid.
+
+    input:
+        -- fin: path to spplate file to read
+        -- fibers: list of fiberids to read
+        -- verbose: whether to print debugging statements or not
+        -- best_exp: read only the "BESTEXP" exposure from all the available
+            exposures (determined by minimum S/R^2?)
+        -- random_exp: read only one random exposure from all the available
+            exposures
+        -- random_seed: seed for choosing random exposure
+        -- llmin: min value of log10(wavelength) to use in wavelength grid
+        -- llmax: max value of log10(wavelength) to use in wavelength grid
+        -- dll: value of distance between log10(wavelength) pixels to use in
+            wavelength grid
+    output: thid, data
+        -- fids: list of fiberids in output
+        -- fliv: flux/iv
+    '''
+
+    ## Want to switch to astropy.io.fits here, as fitsio crashes when certain files are used.
+    ## For example, the header keyname 'EXPID**' in /global/projecta/projectdirs/sdss/data/sdss/dr13/eboss/spectro/redux/v5_9_0/6138/spPlate-6138-56598.fits
+    h = fitsio.FITS(fin)
+    try:
+        head = h[0].read_header()
+    except OSError:
+        print('WARNING: problem with reading headers in {}'.format(f))
+        print('WARNING: Ignoring file')
+        continue
+    """
+    h = fits.open(f)
+    head = h[0].header
+    """
+
+    spcframes = []
+    spectros = ['1','2']
+
+    if best_exp:
+        path = os.path.dirname(fin)
+
+        bestexp = spplate[0].read_header()["BESTEXP"]
+        expid = str(bestexp).zfill(8)
+        for s in spectros:
+            b_exp = path+"/spCFrame-b"+s+'-'+expid+".fits"
+            r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
+            spcframes.append((b_exp,r_exp))
+
+        print("INFO: using best exposure",expid)
+    elif random_exp:
+        path = os.path.dirname(fin)
+
+        ## For each exposure that went into the spplate file, extract the
+        ## expid from the spplate header. Remove duplicates (from different
+        ## cameras) and put into a random order. Use [plate,mjd,random_seed]
+        ## as a random seed.
+        nexp = spplate[0].read_header()["NEXP"]
+        expids = list(set([spplate[0].read_header()["EXPID"+str(n+1).zfill(2)][3:11] for n in range(nexp)]))
+        expids.sort()
+        gen = np.random.RandomState(seed=[spplate[0].read_header()["PLATEID"],spplate[0].read_header()["MJD"],random_seed])
+        gen.shuffle(expids)
+
+        ## For each expid:
+        ind = 0
+        exit = False
+        while (ind<len(expids)) and (not exit):
+            expid = expids[ind]
+            ind += 1
+
+            # Check that this exposure exists for all cameras.
+            files_exist = True
+            for s in spectros:
+                b_exp = path+"/spCFrame-b"+s+'-'+expid+".fits"
+                r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
+                if not (os.path.isfile(b_exp) & os.path.isfile(r_exp)):
+                    files_exist &= False
+
+            # If so, add exposures to the list of infiles.
+            if files_exist:
+                for s in spectros:
+                    b_exp = path+"/spCFrame-b"+s+'-'+expid+".fits"
+                    r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
+                    spcframes.append((b_exp,r_exp))
+
+                # Exit the while loop.
+                exit = True
+
+        # If we did not find files, print a notification.
+        if not files_exist:
+            print("INFO: could not find spCFrame files for all cameras for any single exposure in spplate {}".format(fin))
+            continue
+        else:
+            print("INFO: using randomly chosen exposure",expid)
+
+
+    fids = []
+    fliv = []
+    for spcframe in spcframes:
+        aux = io.read_spcframe(spcframe[0], spcframe[1], fibers, verbose=False)
+        if aux is not None:
+            fids.append(aux[0])
+            fliv.append(aux[1])
+
+    data = []
+    read_plates = 0
+    tids = []
+
+    plate_mjd_in_pmf2tid = np.empty(len(pmf2tid), dtype=object)
+    print('calculating plates-mjd combos')
+    plate_mjd_in_pmf2tid[:] =[(k[0], k[1]) for k in pmf2tid.keys()]
+    print('uniq-ing')
+    plate_mjd_in_pmf2tid = list(np.unique(plate_mjd_in_pmf2tid))
+    print('done')
+
+    if nplates is not None:
+        plates = plates[:nplates]
+    for p in plates:
+        h=fitsio.FITS(p)
+        head = h[0].read_header()
+        plateid = head['PLATEID']
+        m = head['MJD']
+        if (plateid,m) not in plate_mjd_in_pmf2tid:
+            print('{} {} not in list'.format(plateid,m))
+            continue
+
+        exps = []
+        ## read b,r exposures
+        try:
+            nexp_b = head["NEXP_B1"]+head["NEXP_B2"]
+        except:
+            continue
+        if nexp_b>99:
+            nexp_b=99
+        for exp in range(nexp_b):
+            str_exp = str(exp+1)
+            if exp<9:
+                str_exp = '0'+str_exp
+            exp_b = head["EXPID{}".format(str_exp)][:11]
+            exp_r = exp_b.replace("b", "r")
+            exps.append((exp_b, exp_r))
+
+        exps_spectro_1 = [e for e in exps if 'b1' in e[0]]
+        exps_spectro_2 = [e for e in exps if 'b2' in e[0]]
+        if random_exp:
+            irand1 = randint(0,len(exps_spectro_1)-1)
+            irand2 = randint(0,len(exps_spectro_2)-1)
+            exps = [exps_spectro_1[irand1], exps_spectro_2[irand2]]
+
+        for exp_b, exp_r in exps:
+            spcframe_b = dirname(p)+"/spCFrame-{}.fits".format(exp_b)
+            spcframe_r = dirname(p)+"/spCFrame-{}.fits".format(exp_r)
+            res = read_spcframe(spcframe_b, spcframe_r)
+            if res is not None:
+                plate_fid, plate_data = res
+                data.append(plate_data)
+                tids = tids + [pmf2tid[(plateid,m,f)] for f in plate_fid]
+
+        if nplates is not None:
+            if len(data)//2==nplates:
+                break
+
+    data = np.vstack(data)
+
+    return tids, data
 
 def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey', llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
 
@@ -400,7 +573,8 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARG
 
     ## Here, we determine what to do with spectra that duplicate in some way.
     met = [(t,s0,s1,s2) for t,s0,s1,s2 in zip(tids,spid0,spid1,spid2)]
-    umet = [tuple(x) for x in np.unique(met,axis=0)]
+    #umet = [tuple(x) for x in np.unique(met,axis=0)]
+    umet = set(met)
 
     ## Remove any entries with duplicated metadata.
     wdup = np.zeros(tids.shape).astype('bool')
@@ -418,8 +592,8 @@ def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARG
     spid1 = spid1[wdup]
     spid2 = spid2[wdup]
 
-    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)    
-    
+    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
+
     nspec = len(tids)
     fl = np.zeros((nspec, wave_out.nbins))
     iv = np.zeros((nspec, wave_out.nbins))
@@ -598,7 +772,7 @@ def codify_zconf(zconf,mode):
 
     return zconf_codes.astype('i4')
 
-## ??
+## Not used as far as I can see.
 def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
     '''
     Given a list of plates, returns the thing_id list and the
