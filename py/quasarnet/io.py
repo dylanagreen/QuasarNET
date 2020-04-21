@@ -1,12 +1,10 @@
 from __future__ import print_function
 
-from os.path import dirname
-
 import numpy as np
 from numpy import random
 import fitsio
 from random import randint
-from os.path import dirname
+from os.path import dirname, isfile
 
 from quasarnet import utils
 
@@ -84,7 +82,6 @@ def read_spcframe(b_spcframe,r_spcframe,fibers,verbose=False):
 
     hb = fitsio.FITS(b_spcframe)
     hr = fitsio.FITS(r_spcframe)
-
 
     wqso = np.ones(hb[5]['BOSS_TARGET1'][:].shape).astype('bool')
 
@@ -200,7 +197,7 @@ def read_spall(spall):
     return tid, pmf2tid
 
 ## Read the spectra files from BOSS (spplate) or DESI (desi_spectra)
-def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
+def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3, nmasked_max=None):
 
     '''
     Given an spPlate file, returns spectra, interpolated onto a new wavelength
@@ -278,6 +275,8 @@ def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.), llmax=np.log
 
     ## Filter out spectra with too many bad pixels.
     wbad = (iv==0)
+    if nmasked_max is None:
+        nmasked_max = len(wave_out.wave_grid)+1
     w = (wbad.sum(axis=1)>nmasked_max)
     if verbose:
         print('INFO: rejecting {} spectra with too many bad pixels'.format(w.sum()))
@@ -314,13 +313,13 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
 
     ## Want to switch to astropy.io.fits here, as fitsio crashes when certain files are used.
     ## For example, the header keyname 'EXPID**' in /global/projecta/projectdirs/sdss/data/sdss/dr13/eboss/spectro/redux/v5_9_0/6138/spPlate-6138-56598.fits
-    h = fitsio.FITS(fin)
+    spplate = fitsio.FITS(fin)
     try:
-        head = h[0].read_header()
+        head = spplate[0].read_header()
     except OSError:
         print('WARNING: problem with reading headers in {}'.format(f))
         print('WARNING: Ignoring file')
-        continue
+        return None
     """
     h = fits.open(f)
     head = h[0].header
@@ -330,7 +329,7 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
     spectros = ['1','2']
 
     if best_exp:
-        path = os.path.dirname(fin)
+        path = dirname(fin)
 
         bestexp = spplate[0].read_header()["BESTEXP"]
         expid = str(bestexp).zfill(8)
@@ -341,7 +340,7 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
 
         print("INFO: using best exposure",expid)
     elif random_exp:
-        path = os.path.dirname(fin)
+        path = dirname(fin)
 
         ## For each exposure that went into the spplate file, extract the
         ## expid from the spplate header. Remove duplicates (from different
@@ -365,7 +364,7 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
             for s in spectros:
                 b_exp = path+"/spCFrame-b"+s+'-'+expid+".fits"
                 r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
-                if not (os.path.isfile(b_exp) & os.path.isfile(r_exp)):
+                if not (isfile(b_exp) & isfile(r_exp)):
                     files_exist &= False
 
             # If so, add exposures to the list of infiles.
@@ -381,7 +380,7 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
         # If we did not find files, print a notification.
         if not files_exist:
             print("INFO: could not find spCFrame files for all cameras for any single exposure in spplate {}".format(fin))
-            continue
+            return None
         else:
             print("INFO: using randomly chosen exposure",expid)
 
@@ -389,72 +388,15 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
     fids = []
     fliv = []
     for spcframe in spcframes:
-        aux = io.read_spcframe(spcframe[0], spcframe[1], fibers, verbose=False)
+        aux = read_spcframe(spcframe[0], spcframe[1], fibers, verbose=False)
         if aux is not None:
             fids.append(aux[0])
             fliv.append(aux[1])
 
-    data = []
-    read_plates = 0
-    tids = []
+    fids = np.concatenate(fids)
+    fliv = np.vstack(fliv)
 
-    plate_mjd_in_pmf2tid = np.empty(len(pmf2tid), dtype=object)
-    print('calculating plates-mjd combos')
-    plate_mjd_in_pmf2tid[:] =[(k[0], k[1]) for k in pmf2tid.keys()]
-    print('uniq-ing')
-    plate_mjd_in_pmf2tid = list(np.unique(plate_mjd_in_pmf2tid))
-    print('done')
-
-    if nplates is not None:
-        plates = plates[:nplates]
-    for p in plates:
-        h=fitsio.FITS(p)
-        head = h[0].read_header()
-        plateid = head['PLATEID']
-        m = head['MJD']
-        if (plateid,m) not in plate_mjd_in_pmf2tid:
-            print('{} {} not in list'.format(plateid,m))
-            continue
-
-        exps = []
-        ## read b,r exposures
-        try:
-            nexp_b = head["NEXP_B1"]+head["NEXP_B2"]
-        except:
-            continue
-        if nexp_b>99:
-            nexp_b=99
-        for exp in range(nexp_b):
-            str_exp = str(exp+1)
-            if exp<9:
-                str_exp = '0'+str_exp
-            exp_b = head["EXPID{}".format(str_exp)][:11]
-            exp_r = exp_b.replace("b", "r")
-            exps.append((exp_b, exp_r))
-
-        exps_spectro_1 = [e for e in exps if 'b1' in e[0]]
-        exps_spectro_2 = [e for e in exps if 'b2' in e[0]]
-        if random_exp:
-            irand1 = randint(0,len(exps_spectro_1)-1)
-            irand2 = randint(0,len(exps_spectro_2)-1)
-            exps = [exps_spectro_1[irand1], exps_spectro_2[irand2]]
-
-        for exp_b, exp_r in exps:
-            spcframe_b = dirname(p)+"/spCFrame-{}.fits".format(exp_b)
-            spcframe_r = dirname(p)+"/spCFrame-{}.fits".format(exp_r)
-            res = read_spcframe(spcframe_b, spcframe_r)
-            if res is not None:
-                plate_fid, plate_data = res
-                data.append(plate_data)
-                tids = tids + [pmf2tid[(plateid,m,f)] for f in plate_fid]
-
-        if nplates is not None:
-            if len(data)//2==nplates:
-                break
-
-    data = np.vstack(data)
-
-    return tids, data
+    return fids, fliv
 
 def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey', llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
 

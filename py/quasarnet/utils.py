@@ -290,7 +290,7 @@ def get_targeting_bits(mode,verbose=True,desi_period='survey',desi_cmx_bitname=N
             elif desi_period=='cmx':
                 if desi_cmx_bitname=='MINI_SV_QSO':
                     b = 12
-                elif desi_cmx_bitname=='SV0_QSO'
+                elif desi_cmx_bitname=='SV0_QSO':
                     b = 55
                 else:
                     print('ERROR: cmx bit name {} not found, using SV0_QSO'.format(cmx_bitname))

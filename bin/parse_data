@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
 import numpy as np
-from quasarnet import io
+from quasarnet import io, utils
 import fitsio
 #from astropy.io import fits
 import sys
-
 import argparse
 
 parser=argparse.ArgumentParser()
@@ -23,7 +22,7 @@ parser.add_argument('--lmax', type = float, required=False,
 parser.add_argument('--dll', type = float, required=False,
                     default = 1.e-3)
 parser.add_argument('--mode', type = str, required=False, default='BOSS',
-                    options=['BOSS','DESI','DESI_SPECTRA','DESI_COADD','DESI_SIM'])
+                    choices=['BOSS','DESI','DESI_SPECTRA','DESI_COADD','DESI_SIM'])
 parser.add_argument('--use-best-exposure', action='store_true', default=False,
                     required=False)
 parser.add_argument('--use-random-exposure', action='store_true', default=False,
@@ -55,7 +54,7 @@ if args.sdrq is not None:
 ## Otherwise, filter by hardcoded targeting bits.
 else:
     print('getting quasars from target bits')
-    tb = utils.get_targeting_bits(args.mode,verbose=args.verbose,desi_period=desi_period,cmx_bitname=args.desi_cmx_bitname)
+    tb = utils.get_targeting_bits(args.mode,verbose=args.verbose,desi_period=None,desi_cmx_bitname=None)
 
     # Open the spall file to extract further information.
     spall = fitsio.FITS(args.spall)
@@ -123,13 +122,13 @@ for p,m in plate_mjd:
     fibers = plate_mjd[(p,m)]
 
     # Read data, either directly from the spPlate file or via spCFrame files.
-    if args.single_exposures:
+    if args.single_exposures or args.use_best_exposure or args.use_random_exposure:
         # If no method of choosing an exposure is specified, use random.
         if (~args.use_best_exposure) and (~args.use_random_exposure):
             print('INFO: Using random exposure with seed {}'.format(args.random_seed))
             args.use_random_exposure = True
 
-        aux = read_single_exposure(f, fibers, verbose=args.verbose,
+        aux = io.read_single_exposure(f, fibers, verbose=args.verbose,
             best_exp=args.use_best_exposure,
             random_exp=args.use_random_exposure, random_seed=args.random_seed,
             llmin=np.log10(args.lmin), llmax=np.log10(args.lmax), dll=args.dll,
