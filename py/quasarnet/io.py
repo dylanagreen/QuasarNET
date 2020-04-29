@@ -82,52 +82,53 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
     hb = fitsio.FITS(b_spcframe)
     hr = fitsio.FITS(r_spcframe)
 
-    wqso = np.ones(hb[5]['BOSS_TARGET1'][:].shape).astype('bool')
-    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
 
+    ## Read the data from file.
     plate = hb[0].read_header()["PLATEID"]
     fids = hb[5]["FIBERID"][:]
-    fl = np.hstack((hb[0].read(),hr[0].read()))
-    iv = np.hstack((hb[1].read()*(hb[2].read()==0),hr[1].read()*(hr[2].read()==0)))
-    ll = np.hstack((hb[3].read(),hr[3].read()))
+    fl_aux = np.hstack((hb[0].read(),hr[0].read()))
+    iv_aux = np.hstack((hb[1].read()*((h[2].read()[wqso]&2**25)==0),hr[1].read()*((h[2].read()[wqso]&2**25)==0)))
+    wave_aux = 10**np.hstack((hb[3].read(),hr[3].read()))
 
-    ## Filter the fiberids in the file by those we're interested in.
+    ## Filter the data by those we're interested in.
     wqso *= np.in1d(fids, fibers)
-
+    fids = fids[wqso]
+    fl_aux = fl_aux[wqso,:]
+    iv_aux = iv_aux[wqso,:]
+    wave_aux = wave_aux[wqso,:]
     if verbose:
         print("INFO: found {} quasars in file {}".format(wqso.sum(),b_spcframe))
 
-    ## Reduce the data to the spectra we're interested in.
-    fids = fids[wqso]
-    fl = fl[wqso,:]
-    iv = iv[wqso,:]
-    ll = ll[wqso,:]
+    ## Construct the grids for flux and iv.
     nspec = wqso.sum()
+    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
+    fl = np.zeros((nspec,wave_out.nbins))
+    iv = np.zeros((nspec,wave_out.nbins))
 
-    ## Rebin the spectra?
-    # TODO: Would like to redo this.
-    fl_aux = np.zeros((nspec,wave_out.nbins))
-    iv_aux = np.zeros((nspec,wave_out.nbins))
+    for i in range(nspec):
 
-    for i in range(fl.shape[0]):
-
-        bins, w = utils.rebin_wave(10**ll[i,:],wave_out)
+        ## Calculate how to rebin the data.
+        bins, w = utils.rebin_wave(wave_aux[i,:],wave_out)
         bins = bins[w]
 
-        c = np.bincount(bins,weights=fl[i,w]*iv[i,w])
-        fl_aux[i,:len(c)] += c
-        c = np.bincount(bins,weights=iv[i,w])
-        iv_aux[i,:len(c)] += c
+        fl_spec = fl_aux[i][w]
+        iv_spec = iv_aux[i][w]
 
-        assert ~np.isnan(fl_aux,iv_aux).any()
+        ## Rebin the flux and iv and add them to the pre-constructed grids.
+        c = np.bincount(bins,weights=fl_spec*iviv_spec)
+        fl[i,:len(c)] += c
+        c = np.bincount(bins,weights=iv_spec)
+        iv[i,:len(c)] += c
+
+    assert ~np.isnan(fl,iv).any()
 
     ## Normalise the flux and stack fl and iv.
-    w = iv_aux>0
-    fl_aux[w] /= iv_aux[w]
-    fliv = np.hstack((fl_aux,iv_aux))
+    w = iv>0
+    fl[w] /= iv[w]
+    fliv = np.hstack((fl,iv))
 
     ## Filter out spectra with too many bad pixels.
-    wbad = (iv_aux==0)
+    wbad = (iv==0)
     if nmasked_max is None:
         nmasked_max = len(wave_out.wave_grid)+1
     w = (wbad.sum(axis=1)>nmasked_max)
@@ -217,22 +218,22 @@ def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.), llmax=np.log
     wqso = np.in1d(fids, fibers)
     fids = fids[wqso]
 
+    ## Read the data from file.
+    fl_aux = h[0].read()[wqso,:]
+    iv_aux = h[1].read()[wqso,:]*((h[2].read()[wqso]&2**25)==0)
+
     ## Construct the grids for flux and iv.
     nspec = len(fibers)
     wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
     fl = np.zeros((nspec, wave_out.nbins))
     iv = np.zeros((nspec, wave_out.nbins))
 
-    ## Read the data from file.
-    fl_aux = h[0].read()[wqso,:]
-    iv_aux = h[1].read()[wqso,:]*((h[2].read()[wqso]&2**25)==0)
-
     ## Calculate how to rebin the data.
     wave_grid = 10**(c0 + c1*np.arange(fl_aux.shape[1]))
     bins, w = utils.rebin_wave(wave_grid,wave_out)
     bins = bins[w]
     fl_aux = fl_aux[:,w]
-    iv_aux =iv_aux[:,w]
+    iv_aux = iv_aux[:,w]
 
     ## For each spectrum, rebin the flux and iv and add them to the pre-
     ## constructed grids.
@@ -242,10 +243,12 @@ def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.), llmax=np.log
         c = np.bincount(bins, weights = iv_aux[i])
         iv[i,:len(c)]+=c
 
+    assert ~np.isnan(fl,iv).any()
+
     ## Normalise the flux and stack fl and iv.
     w = iv>0
     fl[w] /= iv[w]
-    fl = np.hstack((fl,iv))
+    fliv = np.hstack((fl,iv))
 
     ## Filter out spectra with too many bad pixels.
     wbad = (iv==0)
@@ -256,10 +259,12 @@ def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.), llmax=np.log
         print('INFO: rejecting {} spectra with too many bad pixels'.format(w.sum()))
     if (~w).sum()==0:
         return None
-    fl = fl[~w,:]
     fids = fids[~w]
+    fliv = fliv[~w,:]
 
-    return fids, fl
+    assert ~np.isnan(fliv).any()
+
+    return fids, fliv
 
 ## ??
 def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=False, random_seed=0, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
