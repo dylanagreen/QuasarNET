@@ -76,12 +76,12 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
 
     Returns:
         fids -- fiberids
-        data -- flux/iv
+        fliv -- flux/iv
     '''
 
-    fl = []
-    iv = []
-    fids = []
+    fl_out = []
+    iv_out = []
+    fids_out = []
 
     hb = fitsio.FITS(b_spcframe)
     hr = fitsio.FITS(r_spcframe)
@@ -90,19 +90,19 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
     wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
 
     plate = hb[0].read_header()["PLATEID"]
-    fid = hb[5]["FIBERID"][:]
+    fids = hb[5]["FIBERID"][:]
     fl = np.hstack((hb[0].read(),hr[0].read()))
     iv = np.hstack((hb[1].read()*(hb[2].read()==0),hr[1].read()*(hr[2].read()==0)))
     ll = np.hstack((hb[3].read(),hr[3].read()))
 
     ## Filter the fiberids in the file by those we're interested in.
-    wqso *= np.in1d(fid, fibers)
+    wqso *= np.in1d(fids, fibers)
 
     if verbose:
         print("INFO: found {} quasars in file {}".format(wqso.sum(),b_spcframe))
 
     ## Reduce the data to the spectra we're interested in.
-    fid = fid[wqso]
+    fids = fids[wqso]
     fl = fl[wqso,:]
     iv = iv[wqso,:]
     ll = ll[wqso,:]
@@ -119,18 +119,24 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
         iv_aux = np.zeros(wave_out.nbins)
 
         c = np.bincount(bins,weights=fl[i,w]*iv[i,w])
-        fl_aux[:len(c)] =+ c
+        fl_aux[:len(c)] += c
         c = np.bincount(bins,weights=iv[i,w])
-        iv_aux[:len(c)] =+ c
-        fl.append(fl_aux)
-        iv.append(iv_aux)
-        fids.append(fid[i])
+        iv_aux[:len(c)] += c
+        fl_out.append(fl_aux)
+        iv_out.append(iv_aux)
+        fids_out.append(fids[i])
 
         assert ~np.isnan(fl_aux,iv_aux).any()
 
     ## Stack the fluxes and ivs from the individual spectra into an array.
-    fl = np.vstack(fl)
-    iv = np.vstack(iv)
+    fl = np.vstack(fl_out)
+    iv = np.vstack(iv_out)
+    fids = np.array(fids_out)
+
+    ## Normalise the flux and stack fl and iv.
+    w = iv>0
+    fl[w] /= iv[w]
+    fliv = np.hstack((fl,iv))
 
     ## Filter out spectra with too many bad pixels.
     wbad = (iv==0)
@@ -141,25 +147,12 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
         print('INFO: rejecting {} spectra with too many bad pixels'.format(w.sum()))
     if (~w).sum()==0:
         return None
-    fid = fid[~w]
-    fl = fl[~w,:]
-    iv = iv[~w,:]
-    ll = ll[~w,:]
+    fids = fids[~w]
+    fliv = fliv[~w,:]
 
-    if len(data)==0:
-        return
+    assert ~np.isnan(fliv).any()
 
-    data = np.vstack(data)
-    assert ~np.isnan(data).any()
-    ## now normalize coadded fluxes
-    norm = data[:,nbins:]*1.
-    w = norm==0
-    norm[w] = 1.
-    data[:,:nbins]/=norm
-
-    assert ~np.isnan(data).any()
-
-    return fids, data
+    return fids, fliv
 
 ## spall = metadata for all spectra
 def read_spall(spall):
