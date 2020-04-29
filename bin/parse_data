@@ -124,7 +124,7 @@ for p,m in plate_mjd:
     # Read data, either directly from the spPlate file or via spCFrame files.
     if args.single_exposures or args.use_best_exp or args.use_random_exp:
         # If no method of choosing an exposure is specified, use random.
-        if (~(args.use_best_exp or args.use_random_exp)):
+        if (not (args.use_best_exp or args.use_random_exp)):
             print('INFO: No method of choosing exposure specified.')
             print('INFO: Using random exposure with seed {}.'.format(args.random_seed))
             args.use_random_exp = True
