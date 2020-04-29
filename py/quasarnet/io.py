@@ -92,13 +92,13 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
     hb.close()
 
     ## Construct the grids for flux and iv.
-    nspec = len(fibers)
+    nspec = len(fids)
     wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
     fl = np.zeros((nspec,wave_out.nbins))
     iv = np.zeros((nspec,wave_out.nbins))
 
     for spcframe in [b_spcframe,r_spcframe]:
-        h = fits.open(spcframe)
+        h = fitsio.FITS(spcframe)
 
         ## Read the data from file.
         fl_aux = h[0].read()[wqso,:]
@@ -119,10 +119,8 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
             fl[i,:len(c)] += c
             c = np.bincount(bins,weights=iv_spec)
             iv[i,:len(c)] += c
-
+        
         h.close()
-
-    assert ~np.isnan(fl,iv).any()
 
     ## Normalise the flux and stack fl and iv.
     w = iv>0
@@ -246,8 +244,6 @@ def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.), llmax=np.log
         fl[i,:len(c)] += c
         c = np.bincount(bins, weights = iv_aux[i])
         iv[i,:len(c)]+=c
-
-    assert ~np.isnan(fl,iv).any()
 
     ## Normalise the flux and stack fl and iv.
     w = iv>0
