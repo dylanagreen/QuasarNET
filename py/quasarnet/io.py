@@ -292,13 +292,11 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
     try:
         head = spplate[0].read_header()
     except OSError:
-        print('WARNING: problem with reading headers in {}'.format(f))
-        print('WARNING: Ignoring file')
-        return None
-    """
-    h = fits.open(f)
-    head = h[0].header
-    """
+        print('WARNING: problem with reading headers in {} with fitsio'.format(fin))
+        print('WARNING: Using astropy instead')
+        temp = fits.open(fin)
+        head = temp[0].header
+        temp.close()
 
     spcframes = []
     spectros = ['1','2']
@@ -306,7 +304,7 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
     if best_exp:
         path = dirname(fin)
 
-        bestexp = spplate[0].read_header()["BESTEXP"]
+        bestexp = head["BESTEXP"]
         expid = str(bestexp).zfill(8)
         for s in spectros:
             b_exp = path+"/spCFrame-b"+s+'-'+expid+".fits"
@@ -322,10 +320,10 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
         ## expid from the spplate header. Remove duplicates (from different
         ## cameras) and put into a random order. Use [plate,mjd,random_seed]
         ## as a random seed.
-        nexp = spplate[0].read_header()["NEXP"]
-        expids = list(set([spplate[0].read_header()["EXPID"+str(n+1).zfill(2)][3:11] for n in range(nexp)]))
+        nexp = head["NEXP"]
+        expids = list(set([head["EXPID"+str(n+1).zfill(2)][3:11] for n in range(nexp)]))
         expids.sort()
-        gen = np.random.RandomState(seed=[spplate[0].read_header()["PLATEID"],spplate[0].read_header()["MJD"],random_seed])
+        gen = np.random.RandomState(seed=[head["PLATEID"],head["MJD"],random_seed])
         gen.shuffle(expids)
 
         ## For each expid:
@@ -360,7 +358,6 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
         else:
             if verbose:
                 print("INFO: using randomly chosen exposure",expid)
-
 
     fids = []
     fliv = []
