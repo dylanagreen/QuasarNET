@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+from astropy.io import fits
 import numpy as np
 from numpy import random
 import fitsio
@@ -199,14 +200,11 @@ def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.), llmax=np.log
     try:
         head = h[0].read_header()
     except OSError:
-        print('WARNING: problem with reading headers in {}'.format(fin))
-        print('WARNING: Ignoring file')
-        return None
-
-    """
-    h = fits.open(f)
-    head = h[0].header
-    """
+        print('WARNING: problem with reading headers in {} with fitsio'.format(fin))
+        print('WARNING: Using astropy instead')
+        temp = fits.open(fin)
+        head = temp[0].header
+        temp.close()
 
     c0 = head["COEFF0"]
     c1 = head["COEFF1"]
@@ -317,7 +315,8 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
             r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
             spcframes.append((b_exp,r_exp))
 
-        print("INFO: using best exposure",expid)
+        if vebose:
+            print("INFO: using best exposure",expid)
     elif random_exp:
         path = dirname(fin)
 
@@ -361,7 +360,8 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
             print("INFO: could not find spCFrame files for all cameras for any single exposure in spplate {}".format(fin))
             return None
         else:
-            print("INFO: using randomly chosen exposure",expid)
+            if verbose:
+                print("INFO: using randomly chosen exposure",expid)
 
 
     fids = []
