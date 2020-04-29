@@ -80,45 +80,47 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
     '''
 
     hb = fitsio.FITS(b_spcframe)
-    hr = fitsio.FITS(r_spcframe)
-
-
-    ## Read the data from file.
-    plate = hb[0].read_header()["PLATEID"]
-    fids = hb[5]["FIBERID"][:]
-    fl_aux = np.hstack((hb[0].read(),hr[0].read()))
-    iv_aux = np.hstack((hb[1].read()*((hr[2].read()&2**25)==0),hr[1].read()*((hr[2].read()&2**25)==0)))
-    wave_aux = 10**np.hstack((hb[3].read(),hr[3].read()))
 
     ## Filter the data by those we're interested in.
+    plate = hb[0].read_header()["PLATEID"]
+    fids = hb[5]["FIBERID"][:]
     wqso = np.in1d(fids, fibers)
     fids = fids[wqso]
-    fl_aux = fl_aux[wqso,:]
-    iv_aux = iv_aux[wqso,:]
-    wave_aux = wave_aux[wqso,:]
     if verbose:
         print("INFO: found {} quasars in file {}".format(wqso.sum(),b_spcframe))
 
+    hb.close()
+
     ## Construct the grids for flux and iv.
-    nspec = wqso.sum()
+    nspec = len(fibers)
     wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
     fl = np.zeros((nspec,wave_out.nbins))
     iv = np.zeros((nspec,wave_out.nbins))
 
-    for i in range(nspec):
+    for spcframe in [b_spcframe,r_spcframe]:
+        h = fits.open(spcframe)
 
-        ## Calculate how to rebin the data.
-        bins, w = utils.rebin_wave(wave_aux[i,:],wave_out)
-        bins = bins[w]
+        ## Read the data from file.
+        fl_aux = h[0].read()[wqso,:]
+        iv_aux = h[1].read()[wqso,:]*((h[2].read()[wqso]&2**25)==0)
+        wave_aux = 10**h[3].read()[wqso,:]
 
-        fl_spec = fl_aux[i][w]
-        iv_spec = iv_aux[i][w]
+        for i in range(nspec):
 
-        ## Rebin the flux and iv and add them to the pre-constructed grids.
-        c = np.bincount(bins,weights=fl_spec*iv_spec)
-        fl[i,:len(c)] += c
-        c = np.bincount(bins,weights=iv_spec)
-        iv[i,:len(c)] += c
+            ## Calculate how to rebin the data.
+            bins, w = utils.rebin_wave(wave_aux[i,:],wave_out)
+            bins = bins[w]
+
+            fl_spec = fl_aux[:,w][i]
+            iv_spec = iv_aux[:,w][i]
+
+            ## Rebin the flux and iv and add them to the pre-constructed grids.
+            c = np.bincount(bins,weights=fl_spec*iv_spec)
+            fl[i,:len(c)] += c
+            c = np.bincount(bins,weights=iv_spec)
+            iv[i,:len(c)] += c
+
+        h.close()
 
     assert ~np.isnan(fl,iv).any()
 
@@ -217,6 +219,8 @@ def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.), llmax=np.log
     fids = h[5]["FIBERID"][:]
     wqso = np.in1d(fids, fibers)
     fids = fids[wqso]
+    if verbose:
+        print("INFO: found {} quasars in file {}".format(wqso.sum(),b_spcframe))
 
     ## Read the data from file.
     fl_aux = h[0].read()[wqso,:]
