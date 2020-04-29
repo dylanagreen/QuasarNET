@@ -85,8 +85,8 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
 
     ## Read the data by horizontally stacking.
     fl_aux = np.hstack([hb[0].read(), hr[0].read()])
-    iv_aux = np.hstack([hb[1].read()[wqso,:]*((hb[2].read()[wqso]&2**25)==0),
-        hr[1].read()[wqso,:]*((hr[2].read()[wqso]&2**25)==0)])
+    iv_aux = np.hstack([hb[1].read()*((hb[2].read()&2**25)==0),
+        hr[1].read()*((hr[2].read()&2**25)==0)])
     wave_aux = np.hstack([10**hb[3].read(), 10**hr[3].read()])
 
     ## Filter the data by those we're interested in.
@@ -120,8 +120,6 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
         fl[i,:len(c)] += c
         c = np.bincount(bins,weights=iv_spec)
         iv[i,:len(c)] += c
-
-    h.close()
 
     ## Normalise the flux and stack fl and iv.
     w = iv>0
