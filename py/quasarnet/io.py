@@ -79,10 +79,6 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
         fliv -- flux/iv
     '''
 
-    fl_out = []
-    iv_out = []
-    fids_out = []
-
     hb = fitsio.FITS(b_spcframe)
     hr = fitsio.FITS(r_spcframe)
 
@@ -106,40 +102,32 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
     fl = fl[wqso,:]
     iv = iv[wqso,:]
     ll = ll[wqso,:]
+    nspec = wqso.sum()
 
     ## Rebin the spectra?
     # TODO: Would like to redo this.
+    fl_aux = np.zeros((nspec,wave_out.nbins))
+    iv_aux = np.zeros((nspec,wave_out.nbins))
+
     for i in range(fl.shape[0]):
 
         bins, w = utils.rebin_wave(10**ll[i,:],wave_out)
-        wave_spec = 10**ll[i,:][w]
         bins = bins[w]
 
-        fl_aux = np.zeros(wave_out.nbins)
-        iv_aux = np.zeros(wave_out.nbins)
-
         c = np.bincount(bins,weights=fl[i,w]*iv[i,w])
-        fl_aux[:len(c)] += c
+        fl_aux[i,:len(c)] += c
         c = np.bincount(bins,weights=iv[i,w])
-        iv_aux[:len(c)] += c
-        fl_out.append(fl_aux)
-        iv_out.append(iv_aux)
-        fids_out.append(fids[i])
+        iv_aux[i,:len(c)] += c
 
         assert ~np.isnan(fl_aux,iv_aux).any()
 
-    ## Stack the fluxes and ivs from the individual spectra into an array.
-    fl = np.vstack(fl_out)
-    iv = np.vstack(iv_out)
-    fids = np.array(fids_out)
-
     ## Normalise the flux and stack fl and iv.
-    w = iv>0
-    fl[w] /= iv[w]
-    fliv = np.hstack((fl,iv))
+    w = iv_aux>0
+    fl_aux[w] /= iv_aux[w]
+    fliv = np.hstack((fl_aux,iv_aux))
 
     ## Filter out spectra with too many bad pixels.
-    wbad = (iv==0)
+    wbad = (iv_aux==0)
     if nmasked_max is None:
         nmasked_max = len(wave_out.wave_grid)+1
     w = (wbad.sum(axis=1)>nmasked_max)
