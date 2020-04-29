@@ -81,47 +81,47 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
     '''
 
     hb = fitsio.FITS(b_spcframe)
+    hr = fitsio.FITS(r_spcframe)
+
+    ## Read the data by horizontally stacking.
+    fl_aux = np.hstack([hb[0].read(), hr[0].read()])
+    iv_aux = np.hstack([hb[1].read()[wqso,:]*((hb[2].read()[wqso]&2**25)==0),
+        hr[1].read()[wqso,:]*((hr[2].read()[wqso]&2**25)==0)])
+    wave_aux = np.hstack([10**hb[3].read(), 10**hr[3].read()])
 
     ## Filter the data by those we're interested in.
     plate = hb[0].read_header()["PLATEID"]
     fids = hb[5]["FIBERID"][:]
     wqso = np.in1d(fids, fibers)
     fids = fids[wqso]
+    fl_aux = fl_aux[wqso,:]
+    iv_aux = iv_aux[wqso,:]
+    wave_aux = wave_aux[wqso,:]
     if verbose:
         print("INFO: found {} quasars in file {}".format(wqso.sum(),b_spcframe))
 
-    hb.close()
-
-    ## Construct the grids for flux and iv.
+    ## Construct the output grids for flux and iv.
     nspec = len(fids)
     wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
     fl = np.zeros((nspec,wave_out.nbins))
     iv = np.zeros((nspec,wave_out.nbins))
 
-    for spcframe in [b_spcframe,r_spcframe]:
-        h = fitsio.FITS(spcframe)
+    for i in range(nspec):
 
-        ## Read the data from file.
-        fl_aux = h[0].read()[wqso,:]
-        iv_aux = h[1].read()[wqso,:]*((h[2].read()[wqso]&2**25)==0)
-        wave_aux = 10**h[3].read()[wqso,:]
+        ## Calculate how to rebin the data.
+        bins, w = utils.rebin_wave(wave_aux[i,:],wave_out)
+        bins = bins[w]
 
-        for i in range(nspec):
+        fl_spec = fl_aux[:,w][i]
+        iv_spec = iv_aux[:,w][i]
 
-            ## Calculate how to rebin the data.
-            bins, w = utils.rebin_wave(wave_aux[i,:],wave_out)
-            bins = bins[w]
+        ## Rebin the flux and iv and add them to the pre-constructed grids.
+        c = np.bincount(bins,weights=fl_spec*iv_spec)
+        fl[i,:len(c)] += c
+        c = np.bincount(bins,weights=iv_spec)
+        iv[i,:len(c)] += c
 
-            fl_spec = fl_aux[:,w][i]
-            iv_spec = iv_aux[:,w][i]
-
-            ## Rebin the flux and iv and add them to the pre-constructed grids.
-            c = np.bincount(bins,weights=fl_spec*iv_spec)
-            fl[i,:len(c)] += c
-            c = np.bincount(bins,weights=iv_spec)
-            iv[i,:len(c)] += c
-        
-        h.close()
+    h.close()
 
     ## Normalise the flux and stack fl and iv.
     w = iv>0
