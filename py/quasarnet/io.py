@@ -85,7 +85,7 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
     hr = fitsio.FITS(r_spcframe)
 
     wqso = np.ones(hb[5]['BOSS_TARGET1'][:].shape).astype('bool')
-    wave = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
+    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
 
     plate = hb[0].read_header()["PLATEID"]
     fid = hb[5]["FIBERID"][:]
@@ -113,8 +113,8 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
         wave_spec = 10**ll[i,:][w]
         bins = bins[w]
 
-        fl_aux = np.zeros(wave.nbins)
-        iv_aux = np.zeros(wave.nbins)
+        fl_aux = np.zeros(wave_out.nbins)
+        iv_aux = np.zeros(wave_out.nbins)
 
         c = np.bincount(bins,weights=fl[i,w]*iv[i,w])
         fl_aux[:len(c)] =+ c
