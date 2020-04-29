@@ -87,11 +87,11 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
     plate = hb[0].read_header()["PLATEID"]
     fids = hb[5]["FIBERID"][:]
     fl_aux = np.hstack((hb[0].read(),hr[0].read()))
-    iv_aux = np.hstack((hb[1].read()*((h[2].read()[wqso]&2**25)==0),hr[1].read()*((h[2].read()[wqso]&2**25)==0)))
+    iv_aux = np.hstack((hb[1].read()*((hr[2].read()&2**25)==0),hr[1].read()*((hr[2].read()&2**25)==0)))
     wave_aux = 10**np.hstack((hb[3].read(),hr[3].read()))
 
     ## Filter the data by those we're interested in.
-    wqso *= np.in1d(fids, fibers)
+    wqso = np.in1d(fids, fibers)
     fids = fids[wqso]
     fl_aux = fl_aux[wqso,:]
     iv_aux = iv_aux[wqso,:]
@@ -115,7 +115,7 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
         iv_spec = iv_aux[i][w]
 
         ## Rebin the flux and iv and add them to the pre-constructed grids.
-        c = np.bincount(bins,weights=fl_spec*iviv_spec)
+        c = np.bincount(bins,weights=fl_spec*iv_spec)
         fl[i,:len(c)] += c
         c = np.bincount(bins,weights=iv_spec)
         iv[i,:len(c)] += c
