@@ -315,7 +315,7 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
             r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
             spcframes.append((b_exp,r_exp))
 
-        if vebose:
+        if verbose:
             print("INFO: using best exposure",expid)
     elif random_exp:
         path = dirname(fin)
