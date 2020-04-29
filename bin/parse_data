@@ -122,15 +122,15 @@ for p,m in plate_mjd:
     fibers = plate_mjd[(p,m)]
 
     # Read data, either directly from the spPlate file or via spCFrame files.
-    if args.single_exposures or args.use_best_exposure or args.use_random_exposure:
+    if args.single_exposures or args.use_best_exp or args.use_random_exp:
         # If no method of choosing an exposure is specified, use random.
-        if (~args.use_best_exposure) and (~args.use_random_exposure):
+        if (~args.use_best_exp) and (~args.use_random_exp):
             print('INFO: Using random exposure with seed {}'.format(args.random_seed))
-            args.use_random_exposure = True
+            args.use_random_exp = True
 
         aux = io.read_single_exposure(f, fibers, verbose=args.verbose,
-            best_exp=args.use_best_exposure,
-            random_exp=args.use_random_exposure, random_seed=args.random_seed,
+            best_exp=args.use_best_exp,
+            random_exp=args.use_random_exp, random_seed=args.random_seed,
             llmin=np.log10(args.lmin), llmax=np.log10(args.lmax), dll=args.dll,
             )
     else:
