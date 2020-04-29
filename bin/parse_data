@@ -23,9 +23,9 @@ parser.add_argument('--dll', type = float, required=False,
                     default = 1.e-3)
 parser.add_argument('--mode', type = str, required=False, default='BOSS',
                     choices=['BOSS','DESI','DESI_SPECTRA','DESI_COADD','DESI_SIM'])
-parser.add_argument('--use-best-exposure', action='store_true', default=False,
+parser.add_argument('--use-best-exp', action='store_true', default=False,
                     required=False)
-parser.add_argument('--use-random-exposure', action='store_true', default=False,
+parser.add_argument('--use-random-exp', action='store_true', default=False,
                     required=False)
 parser.add_argument('--random-seed', type = int, required=False,
                     default = 0)

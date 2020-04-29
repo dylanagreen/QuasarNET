@@ -63,7 +63,8 @@ def read_sdrq(sdrq, mode='BOSS'):
     return tid2truth, spid2tid, cols, colnames
 
 ## spcframe = individual exposures of spectra
-def read_spcframe(b_spcframe,r_spcframe,fibers,verbose=False):
+def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
+                llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
 
     '''
     reads data from spcframes
@@ -84,35 +85,7 @@ def read_spcframe(b_spcframe,r_spcframe,fibers,verbose=False):
     hr = fitsio.FITS(r_spcframe)
 
     wqso = np.ones(hb[5]['BOSS_TARGET1'][:].shape).astype('bool')
-
-    """
-    ## Old target filtering. Inconsistent with parse_data. Want to implement a function to carry this out consistently.
-    ## For now, remove it, and include input "fibers" to allow for external target filtering.
-
-    target_bits = hb[5]["BOSS_TARGET1"][:]
-    wqso = np.zeros(len(target_bits),dtype=bool)
-    mask = [10,11,12,13,14,15,16,17,18,19,40,41,42,43,44]
-    for i in mask:
-        wqso = wqso | (target_bits & 2**i)
-    ## SEQUELS
-    try:
-        mask = [10, 11 ,12 ,13, 14, 15, 16, 17, 18]
-        target_bits = h[5]["EBOSS_TARGET0"][:]
-        for i in mask:
-            wqso = wqso | (target_bits & 2**i)
-    except:
-        pass
-
-    ## EBOSS
-    try:
-        mask = [10, 11 ,12 ,13, 14, 15, 16, 17, 18]
-        target_bits = h[5]["EBOSS_TARGET1"][:]
-        for i in mask:
-            wqso = wqso | (target_bits & 2**i)
-    except:
-        pass
-    wqso = wqso>0
-    """
+    wave = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
 
     plate = hb[0].read_header()["PLATEID"]
     fid = hb[5]["FIBERID"][:]
@@ -135,15 +108,18 @@ def read_spcframe(b_spcframe,r_spcframe,fibers,verbose=False):
     ## Rebin the spectra?
     # TODO: Would like to redo this.
     for i in range(fl.shape[0]):
-        fl_aux = np.zeros(nbins)
-        iv_aux = np.zeros(nbins)
-        bins = ((ll[i]-llmin)/dll).astype(int)
-        wbin = (bins>=0) & (bins<nbins) & (iv[i]>0)
-        bins=bins[wbin]
-        c = np.bincount(bins,weights=fl[i,wbin]*iv[i,wbin])
-        fl_aux[:len(c)]=+c
-        c = np.bincount(bins,weights=iv[i,wbin])
-        iv_aux[:len(c)]=+c
+
+        bins, w = utils.rebin_wave(10**ll[i,:],wave_out)
+        wave_spec = 10**ll[i,:][w]
+        bins = bins[w]
+
+        fl_aux = np.zeros(wave.nbins)
+        iv_aux = np.zeros(wave.nbins)
+
+        c = np.bincount(bins,weights=fl[i,w]*iv[i,w])
+        fl_aux[:len(c)] =+ c
+        c = np.bincount(bins,weights=iv[i,w])
+        iv_aux[:len(c)] =+ c
         nmasked = (iv_aux==0).sum()
         if nmasked >= nmasked_max :
             print("INFO: skipping specrum {} with too many masked pixels {}".format(fid[i],nmasked))
@@ -388,7 +364,8 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
     fids = []
     fliv = []
     for spcframe in spcframes:
-        aux = read_spcframe(spcframe[0], spcframe[1], fibers, verbose=False)
+        aux = read_spcframe(spcframe[0], spcframe[1], fibers, verbose=False,
+            llmin=llmin, llmax=llmax, dll=dll)
         if aux is not None:
             fids.append(aux[0])
             fliv.append(aux[1])
@@ -714,7 +691,7 @@ def codify_zconf(zconf,mode):
 
     return zconf_codes.astype('i4')
 
-## Not used as far as I can see.
+"""## Not used as far as I can see.
 def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
     '''
     Given a list of plates, returns the thing_id list and the
@@ -792,7 +769,7 @@ def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
     data = np.vstack(data)
 
     return tids, data
-
+"""
 ################################################################################
 ## Read data after parsing.
 
