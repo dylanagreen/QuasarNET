@@ -64,7 +64,8 @@ def read_sdrq(sdrq, mode='BOSS'):
 
 ## spcframe = individual exposures of spectra
 def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
-                llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
+                llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3,
+                nmasked_max=None):
 
     '''
     reads data from spcframes
@@ -105,6 +106,20 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
     iv = iv[wqso,:]
     ll = ll[wqso,:]
 
+    ## Filter out spectra with too many bad pixels.
+    wbad = (iv==0)
+    if nmasked_max is None:
+        nmasked_max = len(wave_out.wave_grid)+1
+    w = (wbad.sum(axis=1)>nmasked_max)
+    if verbose:
+        print('INFO: rejecting {} spectra with too many bad pixels'.format(w.sum()))
+    if (~w).sum()==0:
+        return None
+    fid = fid[~w]
+    fl = fl[~w,:]
+    iv = iv[~w,:]
+    ll = ll[~w,:]
+
     ## Rebin the spectra?
     # TODO: Would like to redo this.
     for i in range(fl.shape[0]):
@@ -120,10 +135,6 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
         fl_aux[:len(c)] =+ c
         c = np.bincount(bins,weights=iv[i,w])
         iv_aux[:len(c)] =+ c
-        nmasked = (iv_aux==0).sum()
-        if nmasked >= nmasked_max :
-            print("INFO: skipping specrum {} with too many masked pixels {}".format(fid[i],nmasked))
-            continue
         data.append(np.hstack((fl_aux,iv_aux)))
         fids.append(fid[i])
 
