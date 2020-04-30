@@ -61,12 +61,12 @@ if (not args.independent_test_sets) and (not args.independent_training_sets):
     # Make random splits straightforwardly.
     print('INFO: Making {} random splits of the data.'.format(args.nsplits))
     nsplits_round = 1
-    nrounds = args.nsplits.astpe(int)
+    nrounds = args.nsplits.astype(int)
 
 elif args.independent_test_sets:
     # Make splits such that test sets are independent (where possible).
-    nsplits_round = np.floor(1/(1-args.training_proportion)).astpe(int)
-    nrounds = np.ceil(args.nsplits/nsplits_round).astpe(int)
+    nsplits_round = np.floor(1/(1-args.training_proportion)).astype(int)
+    nrounds = np.ceil(args.nsplits/nsplits_round).astype(int)
     print('INFO: Making {} splits of the data, containing {} subsets of {} splits each, each of which will allow for independent test sets.'.format(args.nsplits,nrounds,nsplits_round))
 
     # Print if the independent test sets do not cover the whole dataset.
@@ -75,8 +75,8 @@ elif args.independent_test_sets:
 
 elif args.independent_training_sets:
     # Make splits such that training sets are independent (where possible).
-    nsplits_round = np.floor(1/(args.training_proportion)).astpe(int)
-    nrounds = np.ceil(args.nsplits/nsplits_round).astpe(int)
+    nsplits_round = np.floor(1/(args.training_proportion)).astype(int)
+    nrounds = np.ceil(args.nsplits/nsplits_round).astype(int)
     print('INFO: Making {} splits of the data, containing {} subsets of {} splits each, each of which will be independent training sets.'.format(args.nsplits,nrounds,nsplits_round))
 
     # Print if the independent test sets do not cover the whole dataset.
