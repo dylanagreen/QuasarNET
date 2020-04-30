@@ -24,6 +24,9 @@ parser.add_argument('--training-number',type=float, required=False, default=None
 parser.add_argument('--independent-test-sets', required=False, action='store_true', default=False,
         help='ensure that test sets are independent')
 
+parser.add_argument('--auto-independent', required=False, action='store_true', default=False,
+        help='automatically make test/training sets independent if training proportion is more/less than 0.5')
+
 parser.add_argument('--independent-training-sets', required=False, action='store_true', default=False,
         help='ensure that training sets are independent')
 
@@ -45,6 +48,14 @@ elif (args.training_proportion is not None) and (args.training_number is not Non
     raise ValueError('Both training size options given!')
 elif (args.training_number is not None):
     args.training_proportion = args.training_number/nspec
+
+## Choose whether to have independent training or test sets automatically
+## based on training proportion.
+if args.auto_independent:
+    if args.training_proportion<0.5:
+        args.independent_test_sets = True
+    else:
+        args.independent_training_sets = True
 
 ## Raise errors if the training proportion is too high for independent training
 ## sets, or too low for indepenedent test sets to be made.
@@ -112,9 +123,11 @@ for round in range(nrounds):
                 wtrain = (w>=args.training_proportion*roundsplit) * (w<args.training_proportion*(roundsplit+1))
 
             # Make a file and write the chosen training data to it.
-            h_split = fitsio.FITS(args.out_prefix+'_{}_{}.fits'.format(round,roundsplit),'rw',clobber=True)
+            filename = args.out_prefix+'_{}_{}.fits'.format(round,roundsplit)
+            h_split = fitsio.FITS(filename,'rw',clobber=True)
             h_split.write(h[0][:,:][wtrain,:])
             h_split.write(h[1][:][wtrain],header=h[1].read_header())
             h_split.close()
-            
+            print('INFO: written {}'.format(filename))
+
             nsplits_made += 1
