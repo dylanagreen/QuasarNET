@@ -353,7 +353,8 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
                 for s in spectros:
                     b_exp = path+"/spCFrame-b"+s+'-'+expid+".fits"
                     r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
-                    spcframes.append((b_exp,r_exp))
+                    if (isfile(b_exp) and isfile(r_exp)):
+                        spcframes.append((b_exp,r_exp))
 
                 # Exit the while loop.
                 exit = True
