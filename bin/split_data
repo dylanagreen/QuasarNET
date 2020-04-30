@@ -70,7 +70,7 @@ elif args.independent_test_sets:
     print('INFO: Making {} splits of the data, containing {} subsets of {} splits each, each of which will allow for independent test sets.'.format(args.nsplits,nrounds,nsplits_round))
 
     # Print if the independent test sets do not cover the whole dataset.
-    if args.training_proportion*nsplits_round != 1.0:
+    if (1-args.training_proportion)*nsplits_round != 1.0:
         print('WARN: training proportion of {} does not allow for independent test datasets to cover the whole dataset.'.format(args.training_proportion))
 
 elif args.independent_training_sets:
@@ -102,7 +102,7 @@ for round in range(nrounds):
             if (not args.independent_test_sets) and (not args.independent_training_sets):
                 wtrain = w<args.training_proportion
             elif args.independent_test_sets:
-                wtest = (w>=args.training_proportion*roundsplit) * (w<args.training_proportion*(roundsplit+1))
+                wtest = (w>=(1-args.training_proportion)*roundsplit) * (w<(1-args.training_proportion)*(roundsplit+1))
                 wtrain = (~wtest)
             elif args.independent_training_sets:
                 wtrain = (w>=args.training_proportion*roundsplit) * (w<args.training_proportion*(roundsplit+1))
