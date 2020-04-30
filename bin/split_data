@@ -61,12 +61,12 @@ if (not args.independent_test_sets) and (not args.independent_training_sets):
     # Make random splits straightforwardly.
     print('INFO: Making {} random splits of the data.'.format(args.nsplits))
     nsplits_round = 1
-    nrounds = args.nsplits
+    nrounds = args.nsplits.astpe(int)
 
 elif args.independent_test_sets:
     # Make splits such that test sets are independent (where possible).
-    nsplits_round = np.floor(1/(1-args.training_proportion))
-    nrounds = args.nsplits/nsplits_round
+    nsplits_round = np.floor(1/(1-args.training_proportion)).astpe(int)
+    nrounds = np.ceil(args.nsplits/nsplits_round).astpe(int)
     print('INFO: Making {} splits of the data, containing {} subsets of {} splits each, each of which will allow for independent test sets.'.format(args.nsplits,nrounds,nsplits_round))
 
     # Print if the independent test sets do not cover the whole dataset.
@@ -75,8 +75,8 @@ elif args.independent_test_sets:
 
 elif args.independent_training_sets:
     # Make splits such that training sets are independent (where possible).
-    nsplits_round = np.floor(1/(args.training_proportion))
-    nrounds = args.nsplits/nsplits_round
+    nsplits_round = np.floor(1/(args.training_proportion)).astpe(int)
+    nrounds = np.ceil(args.nsplits/nsplits_round).astpe(int)
     print('INFO: Making {} splits of the data, containing {} subsets of {} splits each, each of which will be independent training sets.'.format(args.nsplits,nrounds,nsplits_round))
 
     # Print if the independent test sets do not cover the whole dataset.
@@ -87,6 +87,7 @@ elif args.independent_training_sets:
 state = np.random.RandomState(seed=args.seed)
 
 ## For each round:
+nsplits_made = 0
 for round in range(nrounds):
 
     # Generate random weights for each spectrum.
@@ -95,21 +96,24 @@ for round in range(nrounds):
     ## For each split in this round:
     for roundsplit in range(nsplits_round):
 
-        # Select the objects which we want to be in our training set.
-        if (not args.independent_test_sets) and (not args.independent_training_sets):
-            wtrain = w<args.training_proportion
-        elif args.independent_test_sets:
-            wtest = (w>=args.training_proportion*roundsplit) * (w<args.training_proportion*(roundsplit+1))
-            wtrain = (~wtest)
-        elif args.independent_training_sets:
-            wtrain = (w>=args.training_proportion*roundsplit) * (w<args.training_proportion*(roundsplit+1))
+        if nsplits_made<args.nsplits:
 
-        print(round,roundsplit,wtrain.sum()/len(wtrain))
+            # Select the objects which we want to be in our training set.
+            if (not args.independent_test_sets) and (not args.independent_training_sets):
+                wtrain = w<args.training_proportion
+            elif args.independent_test_sets:
+                wtest = (w>=args.training_proportion*roundsplit) * (w<args.training_proportion*(roundsplit+1))
+                wtrain = (~wtest)
+            elif args.independent_training_sets:
+                wtrain = (w>=args.training_proportion*roundsplit) * (w<args.training_proportion*(roundsplit+1))
 
-        """
-        # Make a file and write the chosen training data to it.
-        h_split = fitsio.FITS(args.out_prefix+'_{}_{}.fits'.format(round,roundsplit),'rw',clobber=True)
-        h_split.write(h[0][:,:][w_split,:])
-        h_split.write(h[1][:][w_split],header=h[1].read_header())
-        h_split.close()
-        """
+            print(round,roundsplit,wtrain.sum()/len(wtrain))
+
+            """
+            # Make a file and write the chosen training data to it.
+            h_split = fitsio.FITS(args.out_prefix+'_{}_{}.fits'.format(round,roundsplit),'rw',clobber=True)
+            h_split.write(h[0][:,:][w_split,:])
+            h_split.write(h[1][:][w_split],header=h[1].read_header())
+            h_split.close()
+            """
+            nsplits_made += 1
