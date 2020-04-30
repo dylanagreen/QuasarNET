@@ -6,6 +6,7 @@ from numpy import random
 import fitsio
 from random import randint
 from os.path import dirname, isfile
+import glob
 
 from quasarnet import utils
 
@@ -334,20 +335,21 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
         ## For each expid:
         ind = 0
         exit = False
+        nspcframe_pairs = 2
         while (ind<len(expids)) and (not exit):
             expid = expids[ind]
             ind += 1
 
             # Check that this exposure exists for all cameras.
-            files_exist = True
+            spcframe_pairs_found = 0
             for s in spectros:
                 b_exp = path+"/spCFrame-b"+s+'-'+expid+".fits"
                 r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
-                if not (isfile(b_exp) and isfile(r_exp)):
-                    files_exist &= False
+                if (isfile(b_exp) and isfile(r_exp)):
+                    spcframe_pairs_found += 1
 
             # If so, add exposures to the list of infiles.
-            if files_exist:
+            if spcframe_pairs_found==nspcframe_pairs:
                 for s in spectros:
                     b_exp = path+"/spCFrame-b"+s+'-'+expid+".fits"
                     r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
@@ -356,10 +358,17 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
                 # Exit the while loop.
                 exit = True
 
+            # If not, only require spcframe files from one spectrograph.
+            elif (ind==len(expids)) and (nspcframe_pairs==2):
+                ind = 0
+                nspcframe_pairs = 1
+
         # If we did not find files, print a notification.
-        if not files_exist:
-            print("INFO: could not find spCFrame files for all cameras for any single exposure in spplate {}".format(fin))
+        if spcframe_pairs_found==0:
+            print("WARN: could not find any b/r pairs of spCFrame files for any single exposure in spplate {}".format(fin))
             return None
+        elif spcframe_pairs_found==1:
+            print("WARN: could only find 1 b/r pair of spCFrame files for any single exposure in spplate {}".format(fin))
         else:
             if verbose:
                 print("INFO: using randomly chosen exposure",expid)
