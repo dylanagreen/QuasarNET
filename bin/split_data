@@ -53,35 +53,39 @@ if args.independent_test_sets and (args.training_proportion<0.5):
 if args.independent_training_sets and (args.training_proportion>0.5):
     raise ValueError('Cannot have independent training sets with training proportion {}.'.format(args.training_proportion))
 
-
-
 ## Determine the number of random orderings we will need in order to generate
 ## enough training data sets of the desired size.
 if (not args.independent_test_sets) and (not args.independent_training_sets):
     # Make random splits straightforwardly.
     print('INFO: Making {} random splits of the data.'.format(args.nsplits))
     nsplits_round = 1
-    nrounds = args.nsplits.astype(int)
+    nrounds = args.nsplits
 
 elif args.independent_test_sets:
     # Make splits such that test sets are independent (where possible).
-    nsplits_round = np.floor(1/(1-args.training_proportion)).astype(int)
+    nsplits_round = np.floor(1./(1.-args.training_proportion)).astype(int)
     nrounds = np.ceil(args.nsplits/nsplits_round).astype(int)
     print('INFO: Making {} splits of the data, containing {} subsets of {} splits each, each of which will allow for independent test sets.'.format(args.nsplits,nrounds,nsplits_round))
 
     # Print if the independent test sets do not cover the whole dataset.
-    if (1-args.training_proportion)*nsplits_round != 1.0:
+    if not np.isclose((1.-args.training_proportion)*nsplits_round,1.0):
         print('WARN: training proportion of {} does not allow for independent test datasets to cover the whole dataset.'.format(args.training_proportion))
+
+    # Add to the out prefix.
+    args.out_prefix += '_indtest'
 
 elif args.independent_training_sets:
     # Make splits such that training sets are independent (where possible).
-    nsplits_round = np.floor(1/(args.training_proportion)).astype(int)
+    nsplits_round = np.floor(1./(args.training_proportion)).astype(int)
     nrounds = np.ceil(args.nsplits/nsplits_round).astype(int)
     print('INFO: Making {} splits of the data, containing {} subsets of {} splits each, each of which will be independent training sets.'.format(args.nsplits,nrounds,nsplits_round))
 
     # Print if the independent test sets do not cover the whole dataset.
-    if args.training_proportion*nsplits_round != 1.0:
+    if not np.isclose(args.training_proportion*nsplits_round,1.0):
         print('WARN: training proportion of {} does not allow for independent training datasets to cover the whole dataset.'.format(args.training_proportion))
+
+    # Add to the out prefix.
+    args.out_prefix += '_indtrain'
 
 ## Make a random generator.
 state = np.random.RandomState(seed=args.seed)
@@ -107,13 +111,10 @@ for round in range(nrounds):
             elif args.independent_training_sets:
                 wtrain = (w>=args.training_proportion*roundsplit) * (w<args.training_proportion*(roundsplit+1))
 
-            print(round,roundsplit,wtrain.sum()/len(wtrain))
-
-            """
             # Make a file and write the chosen training data to it.
             h_split = fitsio.FITS(args.out_prefix+'_{}_{}.fits'.format(round,roundsplit),'rw',clobber=True)
-            h_split.write(h[0][:,:][w_split,:])
-            h_split.write(h[1][:][w_split],header=h[1].read_header())
+            h_split.write(h[0][:,:][wtrain,:])
+            h_split.write(h[1][:][wtrain],header=h[1].read_header())
             h_split.close()
-            """
+            
             nsplits_made += 1
