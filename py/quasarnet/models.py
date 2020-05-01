@@ -12,7 +12,8 @@ from keras.activations import softmax, relu
 from functools import partial
 import tensorflow as tf
 
-def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc=0):
+def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc=0,
+              offset_activation_function='rescaled_simoid'):
 
     X_input = Input(input_shape)
     X = X_input
@@ -52,20 +53,25 @@ def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc
     # Build the "feature detection" units for each line.
     outputs = []
     X_box = []
+    if offset_activation_function=='sigmoid':
+        tf_activation_function = 'sigmoid'
+    elif offset_activation_function=='rescaled_simoid':
+        tf_activation_function = 'sigmoid'
+    elif offset_activation_function=='linear':
+        tf_activation_function = 'linear'
     for i in range(nlines):
         ## Set up the boxes to determine the coarse location of the line.
         X_box_aux = Dense(boxes, activation='sigmoid',
                 name='fc_box_{}'.format(i),
                 kernel_initializer=glorot_uniform())(X)
         ## Set up the offsets to determine the offset within each box.
-        X_offset_aux = Dense(boxes, activation='sigmoid',
-        #X_offset_aux = Dense(boxes, activation='linear',
+        X_offset_aux = Dense(boxes, activation=tf_activation_function,
                 name='fc_offset_{}'.format(i),
                 kernel_initializer=glorot_uniform())(X)
 
-        ## Don't get this part...
-        ## Rescale the offsets to output between -0.1 and 1.1.
-        X_offset_aux = Lambda(lambda x:-0.1+1.2*x)(X_offset_aux)
+        if offset_activation_function in ['rescaled_simoid','linear']:
+            ## Rescale the offsets to output between -0.1 and 1.1.
+            X_offset_aux = Lambda(lambda x:-0.1+1.2*x)(X_offset_aux)
 
         X_box_aux = concatenate([X_box_aux, X_offset_aux],
                 name="conc_box_{}".format(i))

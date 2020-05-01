@@ -30,6 +30,9 @@ parser.add_argument('--lmax', type = float, required=False,
         default = 10000.)
 parser.add_argument('--dll', type = float, required=False,
         default = 1.e-3)
+parser.add_argument("--offset-activation-function", type = str,
+        choices = ['sigmoid','rescaled_simoid','linear'],
+        default='rescaled_simoid', required=False)
 
 args = parser.parse_args()
 
@@ -58,7 +61,8 @@ model.compile(optimizer=adam, loss=loss, metrics=[])
 ## Construct the objective for the training data.
 box, sample_weight = io.objective(z,Y,bal,lines=args.lines,
         lines_bal=args.lines_bal,nboxes=args.boxes,llmin=np.log10(args.lmin),
-        llmax=np.log10(args.lmax),dll=args.dll)
+        llmax=np.log10(args.lmax),dll=args.dll,
+        offset_activation_function=args.offset_activation_function)
 
 ## If desired, make checkpoint at each epoch.
 if args.save_epoch_checkpoints:

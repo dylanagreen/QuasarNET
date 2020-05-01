@@ -1063,7 +1063,8 @@ def box_offset(z, line='LYA', nboxes = 13, llmin=np.log10(3600.), llmax=np.log10
     return box, offset, weights
 
 # TODO: is this the right place for this?
-def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
+def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13,
+              llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
 
     box=[]
     sample_weight = []
