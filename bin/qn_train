@@ -44,8 +44,8 @@ tids,X,Y,z,bal = io.read_data(args.data,truth)
 model = QuasarNET(
         input_shape=X[0,:,None].shape,
         boxes=args.boxes,
-        nlines=len(args.lines)+len(args.lines_bal)
-        )
+        nlines=len(args.lines)+len(args.lines_bal),
+        offset_activation_function=args.offset_activation_function)
 
 ## Construct the loss function for each line.
 loss = []
@@ -61,8 +61,7 @@ model.compile(optimizer=adam, loss=loss, metrics=[])
 ## Construct the objective for the training data.
 box, sample_weight = io.objective(z,Y,bal,lines=args.lines,
         lines_bal=args.lines_bal,nboxes=args.boxes,llmin=np.log10(args.lmin),
-        llmax=np.log10(args.lmax),dll=args.dll,
-        offset_activation_function=args.offset_activation_function)
+        llmax=np.log10(args.lmax),dll=args.dll)
 
 ## If desired, make checkpoint at each epoch.
 if args.save_epoch_checkpoints:
