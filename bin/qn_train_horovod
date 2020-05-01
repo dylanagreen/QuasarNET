@@ -1,0 +1,116 @@
+#!/usr/bin/env python
+import argparse
+import numpy as np
+import fitsio
+
+from quasarnet.models import QuasarNET, custom_loss
+from tensorflow.keras.optimizers import Adam
+from quasarnet import io
+import horovod.tensorflow.keras as hvd
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument("-t","--truth", type = str, required=False,nargs="*")
+parser.add_argument("-d","--data", type = str, required=True,nargs="*")
+parser.add_argument("-e","--epochs", type = int,
+        required=False, default = 5)
+parser.add_argument("--boxes", type = int,
+        required=False, default = 13)
+parser.add_argument("-o","--out-prefix", type = str, required=True)
+parser.add_argument("-l","--lines", type = str,
+        required=False, default = ["LYA"], nargs="*")
+parser.add_argument("-b","--lines-bal", type = str,
+        required=False, default = ["CIV(1548)"], nargs="*")
+parser.add_argument("--decay", type = float, required=False,
+        default = 0.)
+parser.add_argument("--save-epoch-checkpoints", action='store_true',
+        default=False, required=False)
+parser.add_argument('--lmin', type = float, required=False,
+        default = 3600.)
+parser.add_argument('--lmax', type = float, required=False,
+        default = 10000.)
+parser.add_argument('--dll', type = float, required=False,
+        default = 1.e-3)
+parser.add_argument("--offset-activation-function", type = str,
+        choices = ['sigmoid','rescaled_simoid','linear'],
+        default='rescaled_simoid', required=False)
+
+args = parser.parse_args()
+
+# Horovod: Initialize Horovod
+hvd.init()
+
+## Load the training data and the truth table.
+truth = io.read_truth(args.truth)
+tids,X,Y,z,bal = io.read_data(args.data,truth)
+
+## Set up the model.
+model = QuasarNET(
+        input_shape=X[0,:,None].shape,
+        boxes=args.boxes,
+        nlines=len(args.lines)+len(args.lines_bal),
+        offset_activation_function=args.offset_activation_function)
+
+## Construct the loss function for each line.
+loss = []
+for i in args.lines:
+    loss.append(custom_loss)
+for i in args.lines_bal:
+    loss.append(custom_loss)
+
+## Set up the minimisation procedure.
+adam = Adam(learning_rate=0.001*hvd.size(),decay=args.decay)
+
+# Horovod: Add Horovod Distributed Optimizer
+adam = hvd.DistributedOptimizer(adam)
+
+## Compile model.
+# Horovod: Specify `experimental_run_tf_function=False` to ensure TensorFlow
+# uses hvd.DistributedOptimizer() to compute gradients.
+model.compile(optimizer=adam, loss=loss, metrics=[], experimental_run_tf_function=False)
+
+## Construct the objective for the training data.
+box, sample_weight = io.objective(z,Y,bal,lines=args.lines,
+        lines_bal=args.lines_bal,nboxes=args.boxes,llmin=np.log10(args.lmin),
+        llmax=np.log10(args.lmax),dll=args.dll)
+
+# Horovod: broadcast initial variable states from rank 0 to all other processes.
+# This is necessary to ensure consistent initialization of all workers when
+# training is started with random weights or restored from a checkpoint.
+callbacks = [hvd.callbacks.BroadcastGlobalVariablesCallback(0)]
+
+## If desired, make checkpoint at each epoch.
+if args.save_epoch_checkpoints:
+    from tensorflow.keras.callbacks import ModelCheckpoint
+    # Horovod: save checkpoints only on worker 0 to prevent other workers from corrupting them.
+    if hvd.rank() == 0:
+        filepath = args.out_prefix+"-epoch{epoch:03d}.h5"
+        checkpoint = ModelCheckpoint(filepath,verbose=1)
+        callbacks += [checkpoint]
+
+print(callbacks)
+
+# Horovod: adjust number of epochs based on number of GPUs.
+args.epochs = int(math.ceil(args.epochs / hvd.size()))
+
+## Fit the model using specified hyper-parameters.
+print( "starting fit")
+history = model.fit(X[:,:,None], box,
+        epochs = args.epochs,
+        batch_size = 256,
+        sample_weight = sample_weight,
+        callbacks = callbacks,
+        verbose=(1 if hvd.rank() == 0 else 0)
+        )
+
+## Save the fitted model and printa a summary.
+model.save(args.out_prefix+".h5")
+model.summary()
+
+## Write a hist fits file?
+cols = []
+fout = fitsio.FITS(args.out_prefix+"_hist.fits",'rw',clobber=True)
+for v in history.history.values():
+    cols.append(np.array(v))
+fout.write(cols, names=list(history.history.keys()))
+fout.close()
