@@ -1,16 +1,14 @@
 from __future__ import print_function
 import numpy as np
 
-from keras.layers import Input, Dense, Activation, BatchNormalization, Flatten, Conv1D, concatenate, Lambda
-from keras.models import Model
-import keras.backend as K
-from keras.utils.vis_utils import model_to_dot
-from keras.utils import plot_model
-from keras.initializers import glorot_uniform, glorot_uniform
-from keras import regularizers
-from keras.activations import softmax, relu
-from functools import partial
 import tensorflow as tf
+from tensorflow.keras.layers import Input, Dense, Activation, BatchNormalization, Flatten, Conv1D, concatenate, Lambda
+from tensorflow.keras.models import Model
+import tensorflow.keras.backend as K
+from tensorflow.keras.utils import plot_model
+from tensorflow.keras.initializers import glorot_uniform, glorot_uniform
+from tensorflow.keras import regularizers
+from tensorflow.keras.activations import softmax, relu
 
 def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc=0,
               offset_activation_function='rescaled_simoid'):
@@ -64,6 +62,7 @@ def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc
         X_box_aux = Dense(boxes, activation='sigmoid',
                 name='fc_box_{}'.format(i),
                 kernel_initializer=glorot_uniform())(X)
+
         ## Set up the offsets to determine the offset within each box.
         X_offset_aux = Dense(boxes, activation=tf_activation_function,
                 name='fc_offset_{}'.format(i),
@@ -93,16 +92,16 @@ def custom_loss(y_true, y_pred):
 
     # Construct the first two terms in the loss (see equation (1) in
     # Busca et al. 2018), relating to the box confidence.
-    N1 = tf.reduce_sum(y_true[...,0:nboxes]) + K.epsilon()
-    N2 = tf.reduce_sum((1-y_true[...,0:nboxes])) + K.epsilon()
-    loss_class = -tf.reduce_sum(y_true[...,0:nboxes]*tf.log(K.clip(y_pred[...,0:nboxes], K.epsilon(), 1-K.epsilon())))/N1
-    loss_class -= tf.reduce_sum((1-y_true[...,0:nboxes])*tf.log(K.clip(1-y_pred[...,0:nboxes], K.epsilon(), 1-K.epsilon())))/N2
+    N1 = tf.math.reduce_sum(y_true[...,0:nboxes]) + K.epsilon()
+    N2 = tf.math.reduce_sum((1-y_true[...,0:nboxes])) + K.epsilon()
+    loss_class = -tf.math.reduce_sum(y_true[...,0:nboxes]*tf.math.log(K.clip(y_pred[...,0:nboxes], K.epsilon(), 1-K.epsilon())))/N1
+    loss_class -= tf.math.reduce_sum((1-y_true[...,0:nboxes])*tf.math.log(K.clip(1-y_pred[...,0:nboxes], K.epsilon(), 1-K.epsilon())))/N2
 
     # Construct the final term in the loss (see equation (1) in
     # Busca et al. 2018), relating to the offset within each box.
     offset_true = y_true[...,nboxes:]
     offset_pred = y_pred[...,nboxes:]
-    doffset = tf.subtract(offset_true, offset_pred)
-    loss_offset = tf.reduce_sum(y_true[...,0:nboxes]*tf.square(doffset))/N1
+    doffset = tf.math.subtract(offset_true, offset_pred)
+    loss_offset = tf.math.reduce_sum(y_true[...,0:nboxes]*tf.math.square(doffset))/N1
 
-    return tf.add(loss_class, loss_offset)
+    return tf.math.add(loss_class, loss_offset)
