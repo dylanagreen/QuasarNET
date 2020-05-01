@@ -1,0 +1,71 @@
+#!/usr/bin/env python
+
+import numpy as np
+import fitsio
+import argparse
+
+from quasarnet import io, utils
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--truth-files', nargs='+', type=str, required=True,
+        help='truth file')
+
+parser.add_argument('--targets', type=str, default=None, required=False,
+        help='targets file')
+
+parser.add_argument('--bal-templates', type=str, default=None, required=False,
+        help='BAL templates file')
+
+parser.add_argument('--desi-period',type=str, required=False, default='survey',
+        choices=['survey','sv','cmx'],
+        help='which period of desi are we in (determines targetting bits)')
+
+parser.add_argument('--ignore-target-mask', action='store_true', default=False,
+                    required=False)
+
+parser.add_argument('--out', type=str, required=True,
+        help='output file')
+
+args = parser.parse_args()
+
+## Try to load the DESI quasar mask.
+## Otherwise use a hardcoded value (with warning).
+if not args.ignore_target_mask:
+    quasar_mask = utils.get_quasar_mask()
+else:
+    quasar_mask = None
+
+## Open the truth and targeting files and extract the relevant data.
+tr_dict = io.read_truth_desisim(args.truth_files)
+
+## If targets file provided, filter to only include QSO targets.
+if args.targets is not None:
+    ta_dict = io.read_targets_desisim(args.targets,args.desi_period)
+    w_ta = (ta_dict[args.targeting_bits] & quasar_mask)>0
+    print('INFO: {} objects are QSO targets (out of {})'.format(w_ta.sum(),len(w_ta)))
+    w = np.in1d(tr_dict['TARGETID'],ta_dict['TARGETID'][w_ta])
+else:
+    print('INFO: No QSO targetting used.')
+    w = np.ones_like(tr_dict['TARGETID']).astype('bool')
+
+for k in tr_dict.keys():
+    tr_dict[k] = tr_dict[k][w]
+
+## Open the drq and extract the BAL data.
+## Rearrange it into a tid: (flag,bi) dictionary.
+bal_data = io.read_bal_data_desisim(args.truth_files,args.bal_templates)
+
+## Insert the BAL data into arrays to lie alongside the superset data.
+w = np.in1d(tr_dict['TARGETID'],np.array(list(bal_data.keys())))
+bal_flag = np.zeros(len(tr_dict['TARGETID']))
+bal_flag[w] = np.array([bal_data[t][0] for t in tr_dict['TARGETID'][w]])
+bi_civ = np.zeros(len(tr_dict['TARGETID']))
+bi_civ[w] = np.array([bal_data[t][1] for t in tr_dict['TARGETID'][w]])
+tr_dict['BAL_FLAG'] = bal_flag
+tr_dict['BI_CIV'] = bi_civ
+
+## Write the output truth file.
+h = fitsio.FITS(args.out, 'rw', clobber=True)
+h.write(list(tr_dict.values()), names=list(tr_dict.keys()))
+h.close()

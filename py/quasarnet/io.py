@@ -1,351 +1,713 @@
 from __future__ import print_function
 
-from os.path import dirname
-
+from astropy.io import fits
 import numpy as np
 from numpy import random
 import fitsio
 from random import randint
+from os.path import dirname, isfile
 import glob
-from os.path import dirname
 
+from quasarnet import utils
 
-def read_sdrq(sdrq):
+# TODO: move this somewhere else? Feels an odd place to keep it?
+# Made a class utils.Wave to replace this. Has these llmin/llmax/dll as
+# default but can add functionality to overwrite this with relative ease. Left
+# without for now to avoid any potential issues.
+
+################################################################################
+## Read raw data to be parsed.
+
+def read_sdrq(sdrq, mode='BOSS'):
     '''
-    Constructs two dictionaries thing_id: class, z_conf, z, 
-            and (plate, mjd, fiberid): thing_id
+    Reads a superset DRQ file, and constructs two dictionaries:
+     - {thing_id: class, z_conf, z}
+     - {(plate, mjd, fiberid): thing_id}
     input: (str) full path to Superset_DRQ.fits
-    output: (list of dictionaries)
+    output: (list of dictionaries, columns and column names)
     '''
+
+    tid_field = utils.get_tid_field(mode)
+    spid_fields = utils.get_spectrum_id_fields(mode)
+    truth_fields = utils.get_truth_fields(mode)
 
     sdrq = fitsio.FITS(sdrq)
-    thid = sdrq[1]["THING_ID"][:]
-    class_person = sdrq[1]["CLASS_PERSON"][:]
-    z_conf = sdrq[1]["Z_CONF_PERSON"][:]
-    z_vi = sdrq[1]["Z_VI"][:]
 
-    plate = sdrq[1]['PLATE'][:]
-    mjd = sdrq[1]['MJD'][:]
-    fiberid = sdrq[1]['FIBERID'][:]
+    data = {}
+    f_dicts = [tid_field, spid_fields, truth_fields]
+    for f_dict in f_dicts:
+        for k in f_dict.keys():
+            data[k] = sdrq[1][f_dict[k]][:]
 
-    sdrq = {t:(c,zc,z) for t,c,zc,z in zip(thid, class_person, z_conf, z_vi)}
-    pmf2tid = {(p,m,f):t for p,m,f,t in zip(plate, mjd, fiberid, thid)}
+    ## For a simulation, we have an absolute truth, and so add "confidence"
+    ## artificially.
+    if mode == 'DESISIM':
+        data['Z_CONF'] = 4*np.ones_like(data['Z'])
 
-    return sdrq, pmf2tid
+    sdrq.close()
 
-def read_truth(fi):
+    objclass_codes = codify_objclass(data['OBJCLASS'],mode)
+    data['OBJCLASS'] = objclass_codes
+
+    zconf_codes = codify_zconf(data['Z_CONF'],mode)
+    data['Z_CONF'] = zconf_codes
+
+    ## Construct dictionaries {targetid: class, z_conf, z}, and
+    ## {(spid0, spid1, spid2): targetid}.
+    t2t_data = zip(data['TARGETID'],data['OBJCLASS'],data['Z_CONF'],data['Z'])
+    s2t_data = zip(data['SPID0'],data['SPID1'],data['SPID2'],data['TARGETID'])
+    tid2truth = {t:(c,zc,z) for t,c,zc,z in t2t_data}
+    spid2tid = {(s0,s1,s2):t for s0,s1,s2,t in s2t_data}
+
+    cols = list(data.values())
+    colnames = list(data.keys())
+
+    return tid2truth, spid2tid, cols, colnames
+
+## spcframe = individual exposures of spectra
+def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
+                llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3,
+                nmasked_max=None):
+
     '''
-    reads a list of truth files and returns a truth dictionary
+    reads data from spcframes
 
     Arguments:
-        fi -- list of truth files (list of string)
+        b_spcframe -- spcframe from b part of spectrograph
+        r_spcframe -- spcframe from r part of spectrograph
 
     Returns:
-        truth -- dictionary of THING_ID: metadata instance
-
+        fids -- fiberids
+        fliv -- flux/iv
     '''
-    
-    class metadata:
-        pass
-
-    cols = ['Z_VI','PLATE',
-            'MJD','FIBERID','CLASS_PERSON',
-            'Z_CONF_PERSON','BAL_FLAG_VI','BI_CIV']
-
-    truth = {}
-
-    for f in fi:
-        h = fitsio.FITS(f)
-        tids = h[1]['THING_ID'][:]
-        cols_dict = {c.lower():h[1][c][:] for c in cols}
-        h.close()
-        for i,t in enumerate(tids):
-            m = metadata()
-            for c in cols_dict:
-                setattr(m,c,cols_dict[c][i])
-            truth[t] = m
-
-    return truth
-    
-def read_data(fi, truth=None, z_lim=2.1, 
-        return_pmf=False, nspec=None):
-    '''
-    reads data from input file
-
-    Arguments:
-        fi -- list of data files (string iterable)
-        truth -- dictionary thind_id => metadata
-        z_lim -- hiz/loz cut (float)
-        return_pmf -- if True also return plate,mjd,fiberid
-        nspec -- read this many spectra
-
-    Returns:
-        tids -- list of thing_ids
-        X -- spectra reformatted to be fed to the network (numpy array)
-        Y -- truth vector (nqso, 5): 
-                           STAR = (1,0,0,0,0), GAL = (0,1,0,0,0)
-                           QSO_LZ = (0,0,1,0,0), QSO_HZ = (0,0,0,1,0)
-                           BAD = (0,0,0,0,1)
-        z -- redshift (numpy array)
-        bal -- 1 if bal, 0 if not (numpy array)
-    '''
-    
-    tids = []
-    X = []
-    Y = []
-    z = []
-    bal = []
-
-    if return_pmf:
-        plate = []
-        mjd = []
-        fid = []
-
-    for f in fi:
-        print('INFO: reading data from {}'.format(f))
-        h=fitsio.FITS(f)
-        if nspec is None:
-            nspec = h[1].get_nrows()
-        aux_tids = h[1]['TARGETID'][:nspec].astype(int)
-        ## remove thing_id == -1 or not in sdrq
-        w = (aux_tids != -1) 
-        if truth is not None:
-            w_in_truth = np.in1d(aux_tids, list(truth.keys()))
-            print("INFO: removing {} spectra missing in truth".format((~w_in_truth).sum()),flush=True)
-            w &= w_in_truth
-        aux_tids = aux_tids[w]
-        aux_X = h[0][:nspec,:]
-
-        aux_X = aux_X[w]
-        if return_pmf:
-            aux_plate = h[1]['PLATE'][:][w]
-            aux_mjd = h[1]['MJD'][:][w]
-            aux_fid = h[1]['FIBERID'][:][w]
-            plate += list(aux_plate)
-            mjd += list(aux_mjd)
-            fid += list(aux_fid)
-        
-        X.append(aux_X)
-        tids.append(aux_tids)
-        
-        print("INFO: found {} spectra in file {}".format(aux_tids.shape, f))
-
-    tids = np.concatenate(tids)
-    X = np.concatenate(X)
-
-    if return_pmf:
-        plate = np.array(plate)
-        mjd = np.array(mjd)
-        fid = np.array(fid)
-
-    we = X[:,443:]
-    w = we.sum(axis=1)==0
-    print("INFO: removing {} spectra with zero weights".format(w.sum()))
-    X = X[~w]
-    tids = tids[~w]
-
-    if return_pmf:
-        plate = plate[~w]
-        mjd = mjd[~w]
-        fid = fid[~w]
-
-    mdata = np.average(X[:,:443], weights = X[:,443:], axis=1)
-    sdata = np.average((X[:,:443]-mdata[:,None])**2, 
-            weights = X[:,443:], axis=1)
-    sdata=np.sqrt(sdata)
-
-    w = sdata == 0
-    print("INFO: removing {} spectra with zero flux".format(w.sum()))
-    X = X[~w]
-    tids = tids[~w]
-    mdata = mdata[~w]
-    sdata = sdata[~w]
-
-    if return_pmf:
-        plate = plate[~w]
-        mjd = mjd[~w]
-        fid = fid[~w]
-
-    X = X[:,:443]-mdata[:,None]
-    X /= sdata[:,None]
-
-    if truth==None:
-        if return_pmf:
-            return tids,X,plate,mjd,fid
-        else:
-            return tids,X
-    
-    ## remove zconf == 0 (not inspected)
-    observed = [(truth[t].class_person>0) or (truth[t].z_conf_person>0) for t in tids]
-    observed = np.array(observed, dtype=bool)
-    tids = tids[observed]
-    X = X[observed]
-
-    if return_pmf:
-        plate = plate[observed]
-        mjd = mjd[observed]
-        fid = fid[observed]
-
-    ## fill redshifts
-    z = np.zeros(X.shape[0])
-    z[:] = [truth[t].z_vi for t in tids]
-
-    ## fill bal 
-    bal = np.zeros(X.shape[0])
-    bal[:] = [(truth[t].bal_flag_vi*(truth[t].bi_civ>0))-\
-            (not truth[t].bal_flag_vi)*(truth[t].bi_civ==0) for t in tids]
-    
-    ## fill classes
-    ## classes: 0 = STAR, 1=GALAXY, 2=QSO_LZ, 3=QSO_HZ, 4=BAD (zconf != 3)
-    nclasses = 5
-    sdrq_class = np.array([truth[t].class_person for t in tids])
-    z_conf = np.array([truth[t].z_conf_person for t in tids])
-
-    Y = np.zeros((X.shape[0],nclasses))
-    ## STAR
-    w = (sdrq_class==1) & (z_conf==3)
-    Y[w,0] = 1
-
-    ## GALAXY
-    w = (sdrq_class==4) & (z_conf==3)
-    Y[w,1] = 1
-
-    ## QSO_LZ
-    w = ((sdrq_class==3) | (sdrq_class==30)) & (z<z_lim) & (z_conf==3)
-    Y[w,2] = 1
-
-    ## QSO_HZ
-    w = ((sdrq_class==3) | (sdrq_class==30)) & (z>=z_lim) & (z_conf==3)
-    Y[w,3] = 1
-
-    ## BAD
-    w = z_conf != 3
-    Y[w,4] = 1
-
-    ## check that all spectra have exactly one classification
-    assert (Y.sum(axis=1).min()==1) and (Y.sum(axis=1).max()==1)
-
-    if return_pmf:
-        return tids,X,Y,z,bal,plate,mjd,fid
-
-    return tids,X,Y,z,bal
-
-def read_desi_truth(fin):
-    h=fitsio.FITS(fin)
-    truth = {}
-    for t,c,z in zip(h[1]["TARGETID"][:], h[1]["TRUESPECTYPE"][:], h[1]["TRUEZ"][:]):
-        c = c.strip()
-        if c==b"QSO":
-            c=3
-        elif c==b"GALAXY":
-            c=4
-        elif c==b"STAR":
-            c=1
-        assert isinstance(c,int)
-        truth[t] = (c,3,z)
-    return truth
-
-
-llmin = np.log10(3600)
-llmax = np.log10(10000)
-dll = 1e-3
-
-nbins = int((llmax-llmin)/dll)
-wave = 10**(llmin + np.arange(nbins)*dll)
-nmasked_max = len(wave)+1
-
-def read_spcframe(b_spcframe,r_spcframe):
-    data = []
-    fids = []
 
     hb = fitsio.FITS(b_spcframe)
     hr = fitsio.FITS(r_spcframe)
-    target_bits = hb[5]["BOSS_TARGET1"][:]
-    wqso = np.zeros(len(target_bits),dtype=bool)
-    mask = [10,11,12,13,14,15,16,17,18,19,40,41,42,43,44]
-    for i in mask:
-        wqso = wqso | (target_bits & 2**i)
-    ## SEQUELS
-    try:
-        mask = [10, 11 ,12 ,13, 14, 15, 16, 17, 18]
-        target_bits = h[5]["EBOSS_TARGET0"][:]
-        for i in mask:
-            wqso = wqso | (target_bits & 2**i)
-    except:
-        pass
 
-    ## EBOSS
-    try:
-        mask = [10, 11 ,12 ,13, 14, 15, 16, 17, 18]
-        target_bits = h[5]["EBOSS_TARGET1"][:]
-        for i in mask:
-            wqso = wqso | (target_bits & 2**i)
-    except:
-        pass
-    wqso = wqso>0
-    print("INFO: found {} quasars in file {}".format(wqso.sum(),b_spcframe))
+    ## Read the data by horizontally stacking.
+    fl_aux = np.hstack([hb[0].read(), hr[0].read()])
+    iv_aux = np.hstack([hb[1].read()*((hb[2].read()&2**25)==0),
+        hr[1].read()*((hr[2].read()&2**25)==0)])
+    wave_aux = np.hstack([10**hb[3].read(), 10**hr[3].read()])
 
+    ## Filter the data by those we're interested in.
     plate = hb[0].read_header()["PLATEID"]
-    fid = hb[5]["FIBERID"][:]
-    fl = np.hstack((hb[0].read(),hr[0].read()))
-    iv = np.hstack((hb[1].read()*(hb[2].read()==0),hr[1].read()*(hr[2].read()==0)))
-    ll = np.hstack((hb[3].read(),hr[3].read()))
+    fids = hb[5]["FIBERID"][:]
+    wqso = np.in1d(fids, fibers)
+    fids = fids[wqso]
+    fl_aux = fl_aux[wqso,:]
+    iv_aux = iv_aux[wqso,:]
+    wave_aux = wave_aux[wqso,:]
+    if verbose:
+        print("INFO: found {} quasars in file {}".format(wqso.sum(),b_spcframe))
 
-    fid = fid[wqso]
-    fl = fl[wqso,:]
-    iv = iv[wqso,:]
-    ll = ll[wqso,:]
+    ## Construct the output grids for flux and iv.
+    nspec = len(fids)
+    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
+    fl = np.zeros((nspec,wave_out.nbins))
+    iv = np.zeros((nspec,wave_out.nbins))
 
-    for i in range(fl.shape[0]):
-        fl_aux = np.zeros(nbins)
-        iv_aux = np.zeros(nbins)
-        bins = ((ll[i]-llmin)/dll).astype(int)
-        wbin = (bins>=0) & (bins<nbins) & (iv[i]>0)
-        bins=bins[wbin]
-        c = np.bincount(bins,weights=fl[i,wbin]*iv[i,wbin])
-        fl_aux[:len(c)]=+c
-        c = np.bincount(bins,weights=iv[i,wbin])
-        iv_aux[:len(c)]=+c
-        nmasked = (iv_aux==0).sum()
-        if nmasked >= nmasked_max :
-            print("INFO: skipping specrum {} with too many masked pixels {}".format(fid[i],nmasked))
-            continue
-        data.append(np.hstack((fl_aux,iv_aux)))
-        fids.append(fid[i])
+    for i in range(nspec):
 
-        assert ~np.isnan(fl_aux,iv_aux).any()
+        ## Calculate how to rebin the data.
+        bins, w = utils.rebin_wave(wave_aux[i,:],wave_out)
+        bins = bins[w]
 
-    if len(data)==0:
-        return
+        fl_spec = fl_aux[:,w][i]
+        iv_spec = iv_aux[:,w][i]
 
-    data = np.vstack(data)
-    assert ~np.isnan(data).any()
-    ## now normalize coadded fluxes
-    norm = data[:,nbins:]*1.
-    w = norm==0
-    norm[w] = 1.
-    data[:,:nbins]/=norm
+        ## Rebin the flux and iv and add them to the pre-constructed grids.
+        c = np.bincount(bins,weights=fl_spec*iv_spec)
+        fl[i,:len(c)] += c
+        c = np.bincount(bins,weights=iv_spec)
+        iv[i,:len(c)] += c
 
-    assert ~np.isnan(data).any()
+    ## Normalise the flux and stack fl and iv.
+    w = iv>0
+    fl[w] /= iv[w]
+    fliv = np.hstack((fl,iv))
 
-    return fids, data
+    ## Filter out spectra with too many bad pixels.
+    wbad = (iv==0)
+    if nmasked_max is None:
+        nmasked_max = len(wave_out.wave_grid)+1
+    w = (wbad.sum(axis=1)>nmasked_max)
+    if verbose:
+        print('INFO: rejecting {} spectra with too many bad pixels'.format(w.sum()))
+    if (~w).sum()==0:
+        return None
+    fids = fids[~w]
+    fliv = fliv[~w,:]
 
+    assert ~np.isnan(fliv).any()
+
+    return fids, fliv
+
+## spall = metadata for all spectra
 def read_spall(spall):
+
+    '''
+    reads data from spall file
+
+    Arguments:
+        spall -- filename of spall file
+
+    Returns:
+        tid -- array of tids
+        pmf2tid -- dictionary mapping (plate,mjd,fiber_id) => thing_id
+    '''
+
+    ## Open the file, and read plate, mjd, fiberid, thing_id, specprimary.
     spall = fitsio.FITS(spall)
-    plate=spall[1]["PLATE"][:]
+    plate = spall[1]["PLATE"][:]
     mjd = spall[1]["MJD"][:]
     fid = spall[1]["FIBERID"][:]
     tid = spall[1]["THING_ID"][:].astype(int)
-    specprim=spall[1]["SPECPRIMARY"][:]
+    specprim = spall[1]["SPECPRIMARY"][:]
 
+    ## Construct a dictionary mapping plate, mjd and fiberid to thing_id.
     pmf2tid = {(p,m,f):t for p,m,f,t,s in zip(plate,mjd,fid,tid,specprim)}
     spall.close()
-    return pmf2tid
 
-def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
+    return tid, pmf2tid
+
+## Read the spectra files from BOSS (spplate) or DESI (desi_spectra)
+def read_spplate(fin, fibers, verbose=False, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3, nmasked_max=None):
 
     '''
-    Given a list of plates, returns the thing_id list and the 
+    Given an spPlate file, returns spectra, interpolated onto a new wavelength
+    grid.
+
+    input:
+        -- fin: path to spplate file to read
+        -- fibers: list of fiberids to read
+        -- verbose: whether to print debugging statements or not
+        -- llmin: min value of log10(wavelength) to use in wavelength grid
+        -- llmax: max value of log10(wavelength) to use in wavelength grid
+        -- dll: value of distance between log10(wavelength) pixels to use in
+            wavelength grid
+    output: thid, data
+        -- fids: list of fiberids in output
+        -- data: flux/iv
+    '''
+
+    ## Open the file and read data from the header.
+
+    ## Want to switch to astropy.io.fits here, as fitsio crashes when certain files are used.
+    ## For example, the header keyname 'EXPID**' in /global/projecta/projectdirs/sdss/data/sdss/dr13/eboss/spectro/redux/v5_9_0/6138/spPlate-6138-56598.fits
+    h = fitsio.FITS(fin)
+    try:
+        head = h[0].read_header()
+    except OSError:
+        print('WARNING: problem with reading headers in {} with fitsio'.format(fin))
+        print('WARNING: Using astropy instead')
+        temp = fits.open(fin)
+        head = temp[0].header
+        temp.close()
+
+    c0 = head["COEFF0"]
+    c1 = head["COEFF1"]
+    p = head["PLATEID"]
+    m = head["MJD"]
+
+    ## Filter the fiberids in the file by those we're interested in.
+    fids = h[5]["FIBERID"][:]
+    wqso = np.in1d(fids, fibers)
+    fids = fids[wqso]
+    if verbose:
+        print("INFO: found {} quasars in file {}".format(wqso.sum(),b_spcframe))
+
+    ## Read the data from file.
+    fl_aux = h[0].read()[wqso,:]
+    iv_aux = h[1].read()[wqso,:]*((h[2].read()[wqso]&2**25)==0)
+
+    ## Construct the grids for flux and iv.
+    nspec = len(fibers)
+    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
+    fl = np.zeros((nspec, wave_out.nbins))
+    iv = np.zeros((nspec, wave_out.nbins))
+
+    ## Calculate how to rebin the data.
+    wave_grid = 10**(c0 + c1*np.arange(fl_aux.shape[1]))
+    bins, w = utils.rebin_wave(wave_grid,wave_out)
+    bins = bins[w]
+    fl_aux = fl_aux[:,w]
+    iv_aux = iv_aux[:,w]
+
+    ## For each spectrum, rebin the flux and iv and add them to the pre-
+    ## constructed grids.
+    for i in range(nspec):
+        c = np.bincount(bins, weights=fl_aux[i]*iv_aux[i])
+        fl[i,:len(c)] += c
+        c = np.bincount(bins, weights = iv_aux[i])
+        iv[i,:len(c)]+=c
+
+    ## Normalise the flux and stack fl and iv.
+    w = iv>0
+    fl[w] /= iv[w]
+    fliv = np.hstack((fl,iv))
+
+    ## Filter out spectra with too many bad pixels.
+    wbad = (iv==0)
+    if nmasked_max is None:
+        nmasked_max = len(wave_out.wave_grid)+1
+    w = (wbad.sum(axis=1)>nmasked_max)
+    if verbose:
+        print('INFO: rejecting {} spectra with too many bad pixels'.format(w.sum()))
+    if (~w).sum()==0:
+        return None
+    fids = fids[~w]
+    fliv = fliv[~w,:]
+
+    assert ~np.isnan(fliv).any()
+
+    return fids, fliv
+
+## ??
+def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=False, random_seed=0, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
+    '''
+    Given an spPlate file, returns spectra from one exposure that went into
+    that file, interpolated onto a new wavelength grid.
+
+    input:
+        -- fin: path to spplate file to read
+        -- fibers: list of fiberids to read
+        -- verbose: whether to print debugging statements or not
+        -- best_exp: read only the "BESTEXP" exposure from all the available
+            exposures (determined by minimum S/R^2?)
+        -- random_exp: read only one random exposure from all the available
+            exposures
+        -- random_seed: seed for choosing random exposure
+        -- llmin: min value of log10(wavelength) to use in wavelength grid
+        -- llmax: max value of log10(wavelength) to use in wavelength grid
+        -- dll: value of distance between log10(wavelength) pixels to use in
+            wavelength grid
+    output: thid, data
+        -- fids: list of fiberids in output
+        -- fliv: flux/iv
+    '''
+
+    ## Want to switch to astropy.io.fits here, as fitsio crashes when certain files are used.
+    ## For example, the header keyname 'EXPID**' in /global/projecta/projectdirs/sdss/data/sdss/dr13/eboss/spectro/redux/v5_9_0/6138/spPlate-6138-56598.fits
+    spplate = fitsio.FITS(fin)
+    try:
+        head = spplate[0].read_header()
+    except OSError:
+        print('WARNING: problem with reading headers in {} with fitsio'.format(fin))
+        print('WARNING: Using astropy instead')
+        temp = fits.open(fin)
+        head = temp[0].header
+        temp.close()
+
+    spcframes = []
+    spectros = ['1','2']
+
+    if best_exp:
+        path = dirname(fin)
+
+        bestexp = head["BESTEXP"]
+        expid = str(bestexp).zfill(8)
+        for s in spectros:
+            b_exp = path+"/spCFrame-b"+s+'-'+expid+".fits"
+            r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
+            if (isfile(b_exp) and isfile(r_exp)):
+                spcframes.append((b_exp,r_exp))
+            else:
+                print('WARN: at least one of {} and {} do not exist.'.format(b_exp,r_exp))
+
+        if verbose:
+            print("INFO: using best exposure",expid)
+    elif random_exp:
+        path = dirname(fin)
+
+        ## For each exposure that went into the spplate file, extract the
+        ## expid from the spplate header. Remove duplicates (from different
+        ## cameras) and put into a random order. Use [plate,mjd,random_seed]
+        ## as a random seed.
+        nexp = head["NEXP"]
+        # Set nexp to at most 99 as larger numbers do not fit format.
+        nexp = min(nexp,99)
+        expids = list(set([head["EXPID"+str(n+1).zfill(2)][3:11] for n in range(nexp)]))
+        expids.sort()
+        gen = np.random.RandomState(seed=[head["PLATEID"],head["MJD"],random_seed])
+        gen.shuffle(expids)
+
+        ## For each expid:
+        ind = 0
+        exit = False
+        nspcframe_pairs = 2
+        while (ind<len(expids)) and (not exit):
+            expid = expids[ind]
+            ind += 1
+
+            # Check that this exposure exists for all cameras.
+            spcframe_pairs_found = 0
+            for s in spectros:
+                b_exp = path+"/spCFrame-b"+s+'-'+expid+".fits"
+                r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
+                if (isfile(b_exp) and isfile(r_exp)):
+                    spcframe_pairs_found += 1
+
+            # If so, add exposures to the list of infiles.
+            if spcframe_pairs_found==nspcframe_pairs:
+                for s in spectros:
+                    b_exp = path+"/spCFrame-b"+s+'-'+expid+".fits"
+                    r_exp = path+"/spCFrame-r"+s+'-'+expid+".fits"
+                    if (isfile(b_exp) and isfile(r_exp)):
+                        spcframes.append((b_exp,r_exp))
+
+                # Exit the while loop.
+                exit = True
+
+            # If not, only require spcframe files from one spectrograph.
+            elif (ind==len(expids)) and (nspcframe_pairs==2):
+                ind = 0
+                nspcframe_pairs = 1
+
+        # If we did not find files, print a notification.
+        if spcframe_pairs_found==0:
+            print("WARN: could not find any b/r pairs of spCFrame files for any single exposure in spplate {}".format(fin))
+            return None
+        elif spcframe_pairs_found==1:
+            print("WARN: could only find 1 b/r pair of spCFrame files for any single exposure in spplate {}".format(fin))
+        else:
+            if verbose:
+                print("INFO: using randomly chosen exposure",expid)
+
+    fids = []
+    fliv = []
+    for spcframe in spcframes:
+        aux = read_spcframe(spcframe[0], spcframe[1], fibers, verbose=False,
+            llmin=llmin, llmax=llmax, dll=dll)
+        if aux is not None:
+            fids.append(aux[0])
+            fliv.append(aux[1])
+
+    fids = np.concatenate(fids)
+    fliv = np.vstack(fliv)
+
+    return fids, fliv
+
+def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey', llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
+
+    '''
+    reads data from DESI spectra files (per HEALPix pixel)
+
+    Arguments:
+        fin -- list of spectra files to read
+        ignore_quasar_mask -- include all spectra, not just quasar targets
+        verbose -- chatty or not
+        period -- which period of DESI are we in (decides which targeting bits to use)
+
+    Returns:
+        meta -- dictionary of metadata
+        fl -- hstacked flux/iv array
+    '''
+
+    # Obtain the mask from desitarget if available.
+    if ignore_quasar_mask:
+        quasar_mask = None
+    else:
+        quasar_mask = utils.get_quasar_mask(verbose=verbose,period=period)
+
+    if not isinstance(fin,list):
+        fin = [fin]
+
+    targeting_bit_col = utils.get_desi_targeting_bit_col(period)
+
+    tids_list = []
+    spid0_list = []
+    spid1_list = []
+    spid2_list = []
+    fl_list = []
+    iv_list = []
+    nspec = 0
+    global_tids = []
+
+    for i,f in enumerate(fin):
+
+        aux = read_desi_spectra(f, quasar_mask, verbose=verbose, targeting_bit_col=targeting_bit_col, llmin=llmin, llmax=llmax, dll=dll)
+
+        if aux:
+            tids, spid0, spid1, spid2, fl, iv = aux
+
+            # Check that there are no overlaps between the objects in this file and
+            # in previous ones.
+            if f != fin[0]:
+                check = np.in1d(tids,global_tids)
+                if check.sum() > 0:
+                    if verbose:
+                        print('INFO: the following thing_ids are found in multiple files:')
+                        print(tids[check])
+                    tids = tids[~check]
+                    spid0 = spid0[~check]
+                    spid1 = spid1[~check]
+                    spid2 = spid2[~check]
+                    fl = fl[~check,:]
+                    iv = iv[~check,:]
+
+            # Add the flux and iv arrays for this file to a list.
+            tids_list += [tids]
+            spid0_list += [spid0]
+            spid1_list += [spid1]
+            spid2_list += [spid2]
+            fl_list += [fl]
+            iv_list += [iv]
+            nspec += len(tids)
+            global_tids = np.concatenate(tids_list)
+
+        else:
+            if verbose:
+                print('INFO: {} has no quasar spectra'.format(f))
+
+        print('INFO: read {:4d}/{:4d} files ({:.2%})'.format(i+1,len(fin),(i+1)/len(fin)),end='\r')
+
+    print('')
+
+    if len(tids_list)>0:
+        # Concatenate the lists to arrays.
+        tids = np.concatenate(tids_list)
+        spid0 = np.concatenate(spid0_list)
+        spid1 = np.concatenate(spid1_list)
+        spid2 = np.concatenate(spid2_list)
+        fl = np.concatenate(fl_list,axis=0)
+        iv = np.concatenate(iv_list,axis=0)
+        fliv = np.hstack((fl,iv))
+        print("INFO: found {} good spectra".format(nspec))
+        return tids, spid0, spid1, spid2, fliv
+
+    else:
+        print('WARN: no quasar spectra found in given file list.')
+        return None
+
+def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARGET', llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
+
+    tid_field = utils.get_tid_field('DESI')
+    spid_fields = utils.get_spectrum_id_fields('DESI')
+
+    h = fitsio.FITS(f)
+
+    if quasar_mask is not None:
+        wqso = ((h[1][targeting_bit_col][:] & quasar_mask)>0)
+    else:
+        wqso = np.ones_like(h[1][targeting_bit_col][:]).astype('bool')
+
+    nspec_init = wqso.sum()
+    if nspec_init == 0: return None
+
+    if verbose:
+        print("INFO: found {} target spectra".format(nspec_init))
+
+    tids = h[1][tid_field['TARGETID']][:][wqso]
+    spid0 = h[1][spid_fields['SPID0']][:][wqso]
+    spid1 = h[1][spid_fields['SPID1']][:][wqso]
+    spid2 = h[1][spid_fields['SPID2']][:][wqso]
+
+    ## Here, we determine what to do with spectra that duplicate in some way.
+    met = [(t,s0,s1,s2) for t,s0,s1,s2 in zip(tids,spid0,spid1,spid2)]
+    #umet = [tuple(x) for x in np.unique(met,axis=0)]
+    umet = set(met)
+
+    ## Remove any entries with duplicated metadata.
+    wdup = np.zeros(tids.shape).astype('bool')
+    for um in umet:
+        j = np.where([um==M for M in met])[0]
+        if len(j)>1:
+            wdup[j[0]] = 1
+            if verbose:
+                print('WARN: (tid,spid)={} is duplicated'.format(um))
+        else:
+            wdup[j] = 1
+
+    tids = tids[wdup]
+    spid0 = spid0[wdup]
+    spid1 = spid1[wdup]
+    spid2 = spid2[wdup]
+
+    wave_out = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
+
+    nspec = len(tids)
+    fl = np.zeros((nspec, wave_out.nbins))
+    iv = np.zeros((nspec, wave_out.nbins))
+
+    if nspec == 0: return None
+
+    bands = [x.get_extname().split('_')[0] for x in h.hdu_list if 'WAVELENGTH' in x.get_extname()]
+    for band in bands:
+        h_wave = h["{}_WAVELENGTH".format(band)].read()
+
+        bins, w = utils.rebin_wave(h_wave,wave_out)
+        h_wave = h_wave[w]
+        bins = bins[w]
+
+        # Filter by valid pixels and QSOs.
+        fl_aux = h["{}_FLUX".format(band)].read()[:,w]
+        iv_aux = h["{}_IVAR".format(band)].read()[:,w]
+        fl_aux = fl_aux[wqso][wdup]
+        iv_aux = iv_aux[wqso][wdup]
+
+        # Set NaN values of flux to zero, and make sure they have ivar zero.
+        w_nan = np.isnan(fl_aux)
+        fl_aux[w_nan] = 0.
+        iv_aux[w_nan] = 0.
+
+        ivfl_aux = fl_aux*iv_aux
+
+        for i,t in enumerate(tids):
+            c = np.bincount(bins, weights = ivfl_aux[i,:])
+            fl[i,:len(c)] += c
+            c = np.bincount(bins, weights = iv_aux[i,:])
+            iv[i,:len(c)] += c
+
+    # Normalise flux by dividing by summed ivars.
+    w = iv>0
+    fl[w] /= iv[w]
+
+    return tids, spid0, spid1, spid2, fl, iv
+
+# TODO: write this.
+def read_bal_data_drq(drq, mode='BOSS'):
+
+    return bal_flag, bi_civ
+
+## Simulated DESI specific functions.
+def read_bal_data_desisim(truth_files,bal_templates):
+    """
+    Use a truth file and a BAL templates file to construct a dictionary mapping
+    targetid to (bal_flag,bi_civ).
+
+    Inputs:
+     - truth: filename of truth file, str
+     - bal_templates: filename of BAL templates file, str
+    Outputs:
+     - bal_data: {tid: (bal_flag,bi_civ)}, dict
+    """
+
+    ## Open the truth file, extract the templateid corresponding to each
+    ## targetid.
+    tids = []
+    bal_templateid = []
+    for f in truth_files:
+        h = fitsio.FITS(f)
+
+        """
+        ## Needed for qq runs atm
+        tids.append(h['QSO_META']['TARGETID'][:])
+        bal_templateid.append(h['QSO_META']['BAL_TEMPLATEID'][:])
+        """
+        tids.append(h['TRUTH_QSO']['TARGETID'][:])
+        bal_templateid.append(h['TRUTH_QSO']['BAL_TEMPLATEID'][:])
+        h.close()
+
+    tids = np.hstack(tids)
+    bal_templateid = np.hstack(bal_templateid)
+
+    ## Open the templates file, extract the bi_civ for each templateid.
+    h = fitsio.FITS(bal_templates)
+    bi_civ_templates = h['METADATA']['BI_CIV'][:]
+    h.close()
+
+    ## Exclude templateids<0 (i.e. no template used)
+    w = (bal_templateid>=0)
+    bi_civ = bi_civ_templates[bal_templateid[w]]
+    tids = tids[w]
+
+    ## Construct the dictionary mapping targetid to (bal_flag,bi_civ).
+    bal_data = {t:(1,bi) for t,bi in zip(tids,bi_civ)}
+
+    return bal_data
+
+def read_truth_desisim(truth_files):
+
+    tid_field = utils.get_tid_field('DESISIM')
+    truth_fields = utils.get_truth_fields('DESISIM')
+
+    tr_dict = {}
+    tr_dict[tid_field['TARGETID']] = []
+    for k in truth_fields.keys():
+        tr_dict[k] = []
+
+    for f in truth_files:
+
+        h = fitsio.FITS(f)
+
+        tr_dict[tid_field['TARGETID']].append(h[1][tid_field['TARGETID']][:])
+        for k in truth_fields.keys():
+            tr_dict[k].append(h[1][truth_fields[k]][:])
+
+        h.close()
+
+    tr_dict[tid_field['TARGETID']] = np.hstack(tr_dict[tid_field['TARGETID']])
+    for k in truth_fields.keys():
+        tr_dict[k] = np.hstack(tr_dict[k])
+
+    ## For a simulation, we have an absolute truth, and so add "confidence"
+    ## artificially.
+    tr_dict['Z_CONF'] = 4*np.ones_like(tr_dict['Z'])
+
+    ## OBJCLASS is a string, and has trailing spaces (fitsio related).
+    ## We remove them here to avoid confusion.
+    tr_dict['OBJCLASS'] = np.array([y.strip(' ') for y in tr_dict['OBJCLASS']])
+
+    objclass_codes = codify_objclass(tr_dict['OBJCLASS'],'DESISIM')
+    tr_dict['OBJCLASS'] = objclass_codes
+
+    zconf_codes = codify_zconf(tr_dict['Z_CONF'],'DESISIM')
+    tr_dict['Z_CONF'] = zconf_codes
+
+    return tr_dict
+
+def read_targets_desisim(targets,period):
+
+    tid_field = utils.get_tid_field('DESISIM')
+    targeting_bit_col = utils.get_desi_targeting_bit_col(period)
+
+    h = fitsio.FITS(targets)
+
+    ta_dict = {}
+    ta_dict[tid_field['TARGETID']] = h[1][tid_field['TARGETID']][:]
+    ta_dict[targeting_bit_col] = h[1][targeting_bit_col][:]
+
+    h.close()
+
+    return ta_dict
+
+def codify_objclass(objclass,mode):
+
+    ## Get a dictionary mapping the coded classes to a list of the native class
+    ## names included in that class.
+    cc_dict = utils.get_class_codes(mode)
+
+    ## For each class code, find which objects have native class names that fall
+    ## into its class.
+    objclass_codes = np.zeros(objclass.shape)
+    for k in cc_dict.keys():
+        w = [objclass==classname for classname in cc_dict[k]]
+        w = np.any(w,axis=0)
+        objclass_codes[w] = k
+
+    return objclass_codes.astype('i4')
+
+def codify_zconf(zconf,mode):
+
+    ## Get a dictionary mapping the coded classes to a list of the native class
+    ## names included in that class.
+    zc_dict = utils.get_zconf_codes(mode)
+
+    ## For each class code, find which objects have native class names that fall
+    ## into its class.
+    zconf_codes = np.zeros(zconf.shape)
+    for k in zc_dict.keys():
+        w = [zconf==classname for classname in zc_dict[k]]
+        w = np.any(w,axis=0)
+        zconf_codes[w] = k
+
+    return zconf_codes.astype('i4')
+
+"""## Not used as far as I can see.
+def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
+    '''
+    Given a list of plates, returns the thing_id list and the
         rebinned fluxes for all the exposures in the plates
 
     input:
@@ -381,7 +743,6 @@ def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
             print('{} {} not in list'.format(plateid,m))
             continue
 
-
         exps = []
         ## read b,r exposures
         try:
@@ -404,7 +765,7 @@ def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
             irand1 = randint(0,len(exps_spectro_1)-1)
             irand2 = randint(0,len(exps_spectro_2)-1)
             exps = [exps_spectro_1[irand1], exps_spectro_2[irand2]]
-         
+
         for exp_b, exp_r in exps:
             spcframe_b = dirname(p)+"/spCFrame-{}.fits".format(exp_b)
             spcframe_r = dirname(p)+"/spCFrame-{}.fits".format(exp_r)
@@ -421,125 +782,279 @@ def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
     data = np.vstack(data)
 
     return tids, data
+"""
+################################################################################
+## Read data after parsing.
 
-def export_data(fout,tids,data):
-    h = fitsio.FITS(fout,"rw",clobber=True)
-    h.write(data,extname="DATA")
-    tids = np.array(tids)
-    h.write([tids],names=["TARGETID"],extname="METADATA")
-    h.close()
+def read_truth(fi):
+    '''
+    reads a list of truth files and returns a truth dictionary
 
+    Arguments:
+        fi -- list of truth files (list of string)
 
-def read_desi_spectra(fin, ignore_quasar_mask=False):
-    try:
-        from desitarget import desi_mask
-        quasar_mask = desi_mask.mask('QSO')
-    except:
-        print("WARN: can't load desi_mask, ignoring mask!")
-        quasar_mask = 1
+    Returns:
+        truth -- dictionary of THING_ID: truth data instance
 
-    h=fitsio.FITS(fin)
-    nbins = int((llmax-llmin)/dll)
-    wqso = h[1]['DESI_TARGET'][:] & quasar_mask
-    if ignore_quasar_mask:
-        wqso |= 1
-    wqso = wqso>0
-    print("INFO: found {} quasar targets".format(wqso.sum()))
-    tids = h[1]["TARGETID"][:][wqso]
-    utids = np.unique(tids)
+    '''
 
-    nspec = len(utids)
-    fl = np.zeros((nspec, nbins))
-    iv = np.zeros((nspec, nbins))
-    if nspec == 0: return None
-    for band in ["B", "R", "Z"]:
-        wave = h["{}_WAVELENGTH".format(band)].read()
-        w = (np.log10(wave)>llmin) & (np.log10(wave)<llmax)
-        wave = wave[w]
-        bins = np.floor((np.log10(wave)-llmin)/dll).astype(int)
-        fl_aux = h["{}_FLUX".format(band)].read()[:,w]
-        iv_aux = h["{}_IVAR".format(band)].read()[:,w]
-        fl_aux = fl_aux[wqso]
-        iv_aux = iv_aux[wqso]
-        ivfl_aux = fl_aux*iv_aux
+    class metadata:
+        pass
+
+    cols = list(utils.get_truth_fields(None).keys()) + list(utils.get_bal_fields(None).keys())
+
+    truth_cols = list(utils.get_truth_fields(None).keys())
+    bal_cols = list(utils.get_bal_fields(None).keys())
+
+    BOSS_tf_dict = utils.get_truth_fields('BOSS')
+    BOSS_bf_dict = utils.get_bal_fields('BOSS')
+
+    truth = {}
+
+    ## Cycle through the files, extracting data from each one.
+    for f in fi:
+
+        # Open the file and get the tids.
+        h = fitsio.FITS(f)
+        try:
+            tids = h[1]['TARGETID'][:]
+        except ValueError:
+            tids = h[1]['THING_ID'][:]
+
+        try:
+            truth_cols_dict = {c.lower():h[1][c][:] for c in truth_cols}
+        except ValueError:
+            truth_cols_dict = {c.lower():h[1][BOSS_tf_dict[c]][:] for c in truth_cols}
+            truth_cols_dict['objclass'] = codify_objclass(truth_cols_dict['objclass'],'BOSS')
+            truth_cols_dict['z_conf'] = codify_zconf(truth_cols_dict['z_conf'],'BOSS')
+
+        try:
+            bal_cols_dict = {c.lower():h[1][c][:] for c in bal_cols}
+        except ValueError:
+            bal_cols_dict = {c.lower():h[1][BOSS_bf_dict[c]][:] for c in bal_cols}
+
+        # Cycle through each tid.
         for i,t in enumerate(tids):
-            j = np.argwhere(utids==t)[0]
-            c = np.bincount(bins, weights=ivfl_aux[i])
-            fl[j,:len(c)] += c
-            c = np.bincount(bins, weights = iv_aux[i])
-            iv[j,:len(c)]+=c
+            m = metadata()
+            for c in truth_cols_dict.keys():
+                setattr(m,c,truth_cols_dict[c][i])
+            for c in bal_cols_dict.keys():
+                setattr(m,c,bal_cols_dict[c][i])
+            truth[t] = m
 
-    w = iv>0
-    fl[w]/=iv[w]
-    fl = np.hstack((fl,iv))
+        h.close()
 
-    print("INFO: founds {} good spectra".format(wqso.sum()))
-    return utids, fl
+    return truth
 
-
-def read_spplate(fin, fibers):
-
+def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None):
     '''
-    reads data from spplates
+    reads data from input file
+
+    Arguments:
+        fi -- list of data files (string iterable)
+        truth -- dictionary thind_id => metadata
+        z_lim -- hiz/loz cut (float)
+        return_spid -- if True also return tuple spectrum identifier
+        nspec -- read this many spectra
+        mode -- which data format are we using
+
+    Returns:
+        tids -- list of thing_ids
+        X -- spectra reformatted to be fed to the network (numpy array)
+        Y -- truth vector (nqso, 5):
+                           STAR = (1,0,0,0,0), GAL = (0,1,0,0,0)
+                           QSO_LZ = (0,0,1,0,0), QSO_HZ = (0,0,0,1,0)
+                           BAD = (0,0,0,0,1)
+        z -- redshift (numpy array)
+        bal -- 1 if bal, 0 if not (numpy array)
     '''
 
-    h=fitsio.FITS(fin)
-    head = h[0].read_header()
-    c0 = head["COEFF0"]
-    c1 = head["COEFF1"]
-    p = head["PLATEID"]
-    m = head["MJD"]
-    
-    fids = h[5]["FIBERID"][:]
-    wqso = np.in1d(fids, fibers)
-    fids=fids[wqso]
+    tids = []
+    X = []
+    Y = []
+    z = []
+    bal = []
 
-    nspec = len(fibers)
-    nbins = int((llmax-llmin)/dll)
-    fl = np.zeros((nspec, nbins)) 
-    iv = np.zeros((nspec, nbins))
-    nbins = fl.shape[1]
+    if return_spid:
+        spid0 = []
+        spid1 = []
+        spid2 = []
 
-    fl_aux = h[0].read()[wqso,:]
-    iv_aux = h[1].read()[wqso,:]*((h[2].read()[wqso]&2**25)==0)
-    wave = 10**(c0 + c1*np.arange(fl_aux.shape[1]))
-    bins = np.floor((np.log10(wave)-llmin)/dll).astype(int)
-    w = (bins>=0) & (bins<nbins)
-    bins = bins[w]
+    for f in fi:
+        print('INFO: reading data from {}'.format(f))
+        h = fitsio.FITS(f)
+        if nspec is None:
+            nspec = h[1].get_nrows()
+        aux_tids = h[1]['TARGETID'][:nspec].astype(int)
+        print("INFO: found {} spectra in file {}".format(aux_tids.shape[0], f))
 
-    fl_aux=fl_aux[:,w]
-    iv_aux=iv_aux[:,w]
-    for i in range(nspec):
-        c = np.bincount(bins, weights=fl_aux[i]*iv_aux[i])
-        fl[i,:len(c)] += c
-        c = np.bincount(bins, weights = iv_aux[i])
-        iv[i,:len(c)]+=c
+        ## remove thing_id == -1 or not in sdrq
+        w = (aux_tids != -1)
+        print("INFO: removing {} spectra with thing_id=-1".format((~w).sum()),flush=True)
+        aux_tids = aux_tids[w]
+        aux_X = h[0][:nspec,:]
+        aux_X = aux_X[w,:]
 
-    w = iv>0
-    fl[w]/=iv[w]
-    fl = np.hstack((fl,iv))
-    print(fl.shape)
-    wbad = iv==0
-    w=wbad.sum(axis=1)>nmasked_max
-    print('INFO: rejecting {} spectra with too many bad pixels'.format(w.sum()))
-    if (~w).sum()==0:
-        return None
-    fl=fl[~w,:]
-    return fids[~w],fl
+        if truth is not None:
+            w_in_truth = np.in1d(aux_tids, list(truth.keys()))
+            print("INFO: removing {} spectra missing in truth".format((~w_in_truth).sum()),flush=True)
+            aux_tids = aux_tids[w_in_truth]
+            aux_X = aux_X[w_in_truth]
 
+        if return_spid:
+            try:
+                aux_spid0 = h[1]['SPID0'][:][w]
+                aux_spid1 = h[1]['SPID1'][:][w]
+                aux_spid2 = h[1]['SPID2'][:][w]
+            except ValueError:
+                aux_spid0 = h[1]['PLATE'][:][w]
+                aux_spid1 = h[1]['MJD'][:][w]
+                aux_spid2 = h[1]['FIBERID'][:][w]
+            spid0 += list(aux_spid0)
+            spid1 += list(aux_spid1)
+            spid2 += list(aux_spid2)
+
+        X.append(aux_X)
+        tids.append(aux_tids)
+
+    tids = np.concatenate(tids)
+    X = np.concatenate(X)
+
+    if return_spid:
+        spid0 = np.array(spid0)
+        spid1 = np.array(spid1)
+        spid2 = np.array(spid2)
+
+    ## Get the number of cells.
+    ncells = X.shape[1]/2.
+    assert ncells==round(ncells)
+    ncells = round(ncells)
+    print('INFO: Spectra have {} cells'.format(ncells))
+
+    we = X[:,ncells:]
+    w = we.sum(axis=1)==0
+    print("INFO: removing {} spectra with zero weights".format(w.sum()))
+    X = X[~w]
+    tids = tids[~w]
+
+    if return_spid:
+        spid0 = spid0[~w]
+        spid1 = spid1[~w]
+        spid2 = spid2[~w]
+
+    mdata = np.average(X[:,:ncells], weights = X[:,ncells:], axis=1)
+    sdata = np.average((X[:,:ncells]-mdata[:,None])**2,
+            weights = X[:,ncells:], axis=1)
+    sdata=np.sqrt(sdata)
+
+    w = sdata == 0
+    print("INFO: removing {} spectra with zero flux".format(w.sum()))
+    X = X[~w]
+    tids = tids[~w]
+    mdata = mdata[~w]
+    sdata = sdata[~w]
+
+    if return_spid:
+        spid0 = spid0[~w]
+        spid1 = spid1[~w]
+        spid2 = spid2[~w]
+
+    X = X[:,:ncells]-mdata[:,None]
+    X /= sdata[:,None]
+
+    if truth==None:
+        if return_spid:
+            return tids,X,spid0,spid1,spid2
+        else:
+            return tids,X
+
+    ## remove zconf == 0 (not inspected)
+    observed = [(truth[t].objclass>0) or (truth[t].z_conf>0) for t in tids]
+    observed = np.array(observed, dtype=bool)
+    print("INFO: removing {} spectra that were not inspected".format((~np.array(observed)).sum()))
+    tids = tids[observed]
+    X = X[observed]
+
+    if return_spid:
+        spid0 = spid0[observed]
+        spid1 = spid1[observed]
+        spid2 = spid2[observed]
+
+    ## fill redshifts
+    z = np.zeros(X.shape[0])
+    z[:] = [truth[t].z for t in tids]
+
+    ## fill bal
+    bal = np.zeros(X.shape[0])
+    bal[:] = [(truth[t].bal_flag*(truth[t].bi_civ>0))-\
+            (not truth[t].bal_flag)*(truth[t].bi_civ==0) for t in tids]
+
+    ## fill classes
+    ## classes: 0 = STAR, 1=GALAXY, 2=QSO_LZ, 3=QSO_HZ, 4=BAD (zconf != 3)
+    nclasses = 5
+    objclass = np.array([truth[t].objclass for t in tids])
+    z_conf = np.array([truth[t].z_conf for t in tids])
+
+    Y = get_Y(objclass,z,z_conf,qso_zlim=z_lim)
+
+    ## check that all spectra have exactly one classification
+    assert (Y.sum(axis=1).min()==1) and (Y.sum(axis=1).max()==1)
+
+    print("INFO: {} spectra in returned dataset".format(tids.shape[0]))
+
+    if return_spid:
+        return tids,X,Y,z,bal,spid0,spid1,spid2
+
+    return tids,X,Y,z,bal
+
+def get_Y(objclass,z,z_conf,qso_zlim=2.1):
+
+    Y = np.zeros((objclass.shape[0],5))
+
+    ## STAR
+    w = (objclass==1) & (z_conf==2)
+    Y[w,0] = 1
+
+    ## GALAXY
+    w = (objclass==2) & (z_conf==2)
+    Y[w,1] = 1
+
+    ## QSO_LZ
+    w = (objclass==3) & (z<qso_zlim) & (z_conf==2)
+    Y[w,2] = 1
+
+    ## QSO_HZ
+    w = (objclass==3) & (z>=qso_zlim) & (z_conf==2)
+    Y[w,3] = 1
+
+    ## BAD
+    w = (z_conf != 2)
+    Y[w,4] = 1
+
+    return Y
+
+################################################################################
+## Training functions.
+
+# TODO: should this go in utils maybe?
 from .utils import absorber_IGM
 from scipy.interpolate import interp1d
-def box_offset(z, line='LYA', nboxes = 13):
-    wave_to_i = interp1d(wave, np.arange(len(wave)), 
+def box_offset(z, line='LYA', nboxes = 13, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
+
+    wave = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
+
+    ## Interpolate the locations of the line in each object in terms of
+    ## wavelength to the position in terms of the number of boxes.
+    wave_to_i = interp1d(wave.wave_grid, np.arange(len(wave.wave_grid)),
             bounds_error=False, fill_value=-1)
     wave_line = (1+z)*absorber_IGM[line]
-    pos = wave_to_i(wave_line)/len(wave)*nboxes
+    pos = wave_to_i(wave_line)/len(wave.wave_grid)*nboxes
     ipos = np.floor(pos).astype(int)
 
     box = np.zeros((len(z), nboxes))
     offset = np.zeros((len(z), nboxes))
 
-    w = ipos>=0
+    w = (ipos>=0)
     box[w, ipos[w]] = 1
     offset[w, ipos[w]] = (pos-ipos)[w]
     weights = np.ones(len(z))
@@ -547,24 +1062,27 @@ def box_offset(z, line='LYA', nboxes = 13):
 
     return box, offset, weights
 
-def objective(z, Y, bal, lines=['LYA'],
-        lines_bal=['CIV(1548)'], nboxes=13):
+# TODO: is this the right place for this?
+def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13,
+              llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
+
     box=[]
     sample_weight = []
     for l in lines:
-        box_line, offset_line, weight_line = box_offset(z, 
-                line = l, nboxes=nboxes)
+        # TODO: Do we need to use "weight_line"?
+        box_line, offset_line, weight_line = box_offset(z,
+                line = l, nboxes=nboxes, llmin=llmin, llmax=llmax, dll=dll)
 
         w = (Y.argmax(axis=1)==2) | (Y.argmax(axis=1)==3)
-        ## set to zero where object is not a QSO 
+        ## set to zero where object is not a QSO
         ## (the line confidence should be zero)
         box_line[~w]=0
         box.append(np.concatenate([box_line, offset_line], axis=-1))
         sample_weight.append(np.ones(Y.shape[0]))
 
     for l in lines_bal:
-        box_line, offset_line, weight_line = box_offset(z, 
-                line = l, nboxes=nboxes)
+        box_line, offset_line, weight_line = box_offset(z,
+                line = l, nboxes=nboxes, llmin=llmin, llmax=llmax, dll=dll)
 
         ## set to zero for non-quasars
         wqso = (Y.argmax(axis=1)==2) | (Y.argmax(axis=1)==3)
@@ -578,5 +1096,18 @@ def objective(z, Y, bal, lines=['LYA'],
         bal_weight = bal != 0
         box.append(np.concatenate([box_line, offset_line], axis=-1))
         sample_weight.append(bal_weight)
-    
+
     return box, sample_weight
+
+################################################################################
+## Export data.
+
+# TODO: what does this do exactly? Search for uses.
+# Doesn't seem to be used in the repo at all.
+# Maybe in scripts? Haven't seen any exts with 'DATA' as a name...
+def export_data(fout,tids,data):
+    h = fitsio.FITS(fout,"rw",clobber=True)
+    h.write(data,extname="DATA")
+    tids = np.array(tids)
+    h.write([tids],names=["TARGETID"],extname="METADATA")
+    h.close()

@@ -20,7 +20,7 @@ parser.add_argument("--data",type=str,required=True, default = None)
 args=parser.parse_args()
 
 if args.super_drq is not None:
-    truth, tids2pmf = read_sdrq(args.super_drq)
+    truth, tids2pmf, _, _ = read_sdrq(args.super_drq)
 elif args.truth is not None:
     truth = read_desi_truth(args.truth)
 elif args.spall is not None:
