@@ -88,20 +88,22 @@ def custom_loss(y_true, y_pred):
     # Assert that the predictions have an even number of columns, corresponding
     # to the box confidence and offset for each box.
     assert y_pred.shape[1]%2 == 0
+
     nboxes = y_pred.get_shape().as_list()[1]//2
 
     # Construct the first two terms in the loss (see equation (1) in
     # Busca et al. 2018), relating to the box confidence.
-    N1 = tf.math.reduce_sum(y_true[...,0:nboxes]) + K.epsilon()
-    N2 = tf.math.reduce_sum((1-y_true[...,0:nboxes])) + K.epsilon()
-    loss_class = -tf.math.reduce_sum(y_true[...,0:nboxes]*tf.math.log(K.clip(y_pred[...,0:nboxes], K.epsilon(), 1-K.epsilon())))/N1
-    loss_class -= tf.math.reduce_sum((1-y_true[...,0:nboxes])*tf.math.log(K.clip(1-y_pred[...,0:nboxes], K.epsilon(), 1-K.epsilon())))/N2
+    N1 = tf.math.reduce_sum(y_true[...,0:nboxes], axis=1) + K.epsilon()
+    N2 = tf.math.reduce_sum((1-y_true[...,0:nboxes]), axis=1) + K.epsilon()
+    loss_class = -tf.math.reduce_sum(y_true[...,0:nboxes]*tf.math.log(K.clip(y_pred[...,0:nboxes], K.epsilon(), 1-K.epsilon())), axis=1)/N1
+    loss_class -= tf.math.reduce_sum((1-y_true[...,0:nboxes])*tf.math.log(K.clip(1-y_pred[...,0:nboxes], K.epsilon(), 1-K.epsilon())), axis=1)/N2
 
     # Construct the final term in the loss (see equation (1) in
     # Busca et al. 2018), relating to the offset within each box.
     offset_true = y_true[...,nboxes:]
+
     offset_pred = y_pred[...,nboxes:]
     doffset = tf.math.subtract(offset_true, offset_pred)
-    loss_offset = tf.math.reduce_sum(y_true[...,0:nboxes]*tf.math.square(doffset))/N1
+    loss_offset = tf.math.reduce_sum(y_true[...,0:nboxes]*tf.math.square(doffset), axis=1)/N1
 
     return tf.math.add(loss_class, loss_offset)
