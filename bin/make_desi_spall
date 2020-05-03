@@ -1,0 +1,42 @@
+#!/usr/bin/env python
+
+import numpy as np
+import fitsio
+import argparse
+
+parser=argparse.ArgumentParser()
+
+parser.add_argument('--spectra',type=str, nargs='+', required=True,
+        help='list of spectra files')
+
+parser.add_argument('--out',type=str, required=True,
+        help='output file')
+
+args=parser.parse_args()
+
+## Cycle through the spectra files, exctracting data from each one.
+cols = ['TARGETID', 'NIGHT', 'EXPID', 'FIBER', 'TILEID',
+        'DESI_TARGET', 'SV1_DESI_TARGET', 'FIBERSTATUS']
+data = {}
+for col in cols:
+    data[col] = []
+nread = 0
+for i,f in enumerate(args.spectra):
+    h = fitsio.FITS(f)
+    for col in cols:
+        data[col].append(h[1][col][:])
+    print('INFO: read {:4d}/{:4d} files ({:.2%})'.format(i+1,len(args.spectra),(i+1)/len(args.spectra)),end='\r')
+print('')
+
+# Concatenate all results to form single arrays.
+if len(data['TARGETID'])>0:
+    for col in cols:
+        data[col] = np.concatenate(data[col])
+
+    ## Write the output to a fits file, with flux/iv in the primary HDU, and a
+    ## catalog of objects in the 1st extension.
+    h = fitsio.FITS(args.out,'rw',clobber=True)
+    h.write(list(data.values()), names=list(data.keys()))
+    h.close()
+else:
+    print('WARN: no quasar targets found in spectra files. Exiting.')

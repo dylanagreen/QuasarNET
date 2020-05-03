@@ -1,0 +1,80 @@
+#!/usr/bin/env python
+
+import numpy as np
+import fitsio
+import sys
+import argparse
+
+from quasarnet import io, utils
+
+parser=argparse.ArgumentParser()
+
+parser.add_argument('--spectra',type=str, nargs='+', required=True,
+        help='list of spectra files')
+
+parser.add_argument('--sdrq',type=str, required=False, default=None,
+        help='superset file')
+
+parser.add_argument('--desi-period',type=str, required=False, default='survey',
+        choices=['survey','sv','cmx'],
+        help='which period of desi are we in (determines targetting bits)')
+
+parser.add_argument('--ignore-target-mask', action='store_true', default=False,
+                    required=False)
+
+parser.add_argument('--out',type=str, required=True,
+        help='output file')
+
+parser.add_argument('--verbose', action='store_true', default=False,
+                    required=False)
+
+parser.add_argument('--lmin', type = float, required=False,
+                    default = 3600.)
+
+parser.add_argument('--lmax', type = float, required=False,
+                    default = 10000.)
+
+parser.add_argument('--dll', type = float, required=False,
+                    default = 1.e-3)
+
+args=parser.parse_args()
+
+## Cycle through the spectra files, exctracting data from each one.
+fl = []
+tids = []
+nread = 0
+aux = io.read_desi_spectra_list(args.spectra,ignore_quasar_mask=args.ignore_target_mask,verbose=args.verbose,period=args.desi_period,llmin=np.log10(args.lmin),llmax=np.log10(args.lmax),dll=args.dll)
+if aux:
+    tids, spid0, spid1, spid2, fliv = aux
+else:
+    raise Exception('WARN: No spectra found; exiting.')
+
+## If we have an sdrq, filter the tids by those in sdrq.
+if args.sdrq is not None:
+    if args.verbose:
+        print('INFO: reading sdrq, including only spectra with targetid in sdrq.')
+    sdrq = fitsio.FITS(args.sdrq)
+    tids_sdrq = sdrq[1]['TARGETID'][:]
+    sdrq.close()
+    w = np.in1d(tids,tids_sdrq)
+    tids = tids[w]
+    spid0 = spid0[w]
+    spid1 = spid1[w]
+    spid2 = spid2[w]
+    fliv = fliv[w,:]
+    if args.verbose:
+        print('INFO: done.')
+
+## Define the spid components in a header.
+spid_fields= utils.get_spectrum_id_fields('DESISIM')
+head = [{'name':'MODE', 'value':'DESISIM', 'comment': 'Input data format'}]
+for i,k in enumerate(list(spid_fields.keys())):
+    head += [{'name':k, 'value':spid_fields[k],
+                'comment':'Spectrum identifier field {}'.format(i)}]
+
+    ## Write the output to a fits file, with flux/iv in the primary HDU, and a
+## catalog of objects in the 1st extension.
+h = fitsio.FITS(args.out,'rw',clobber=True)
+h.write(fliv)
+h.write([tids,spid0,spid1,spid2], names=['TARGETID','SPID0','SPID1','SPID2'], header=head)
+h.close()
