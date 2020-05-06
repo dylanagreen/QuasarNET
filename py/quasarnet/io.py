@@ -786,7 +786,7 @@ def read_exposures(plates,pmf2tid,nplates=None, random_exp=False):
 ################################################################################
 ## Read data after parsing.
 
-def read_truth(fi):
+def read_truth(fi,mode='BOSS'):
     '''
     reads a list of truth files and returns a truth dictionary
 
@@ -806,8 +806,8 @@ def read_truth(fi):
     truth_cols = list(utils.get_truth_fields(None).keys())
     bal_cols = list(utils.get_bal_fields(None).keys())
 
-    BOSS_tf_dict = utils.get_truth_fields('BOSS')
-    BOSS_bf_dict = utils.get_bal_fields('BOSS')
+    BOSS_tf_dict = utils.get_truth_fields(mode)
+    BOSS_bf_dict = utils.get_bal_fields(mode)
 
     truth = {}
 
@@ -825,8 +825,8 @@ def read_truth(fi):
             truth_cols_dict = {c.lower():h[1][c][:] for c in truth_cols}
         except ValueError:
             truth_cols_dict = {c.lower():h[1][BOSS_tf_dict[c]][:] for c in truth_cols}
-            truth_cols_dict['objclass'] = codify_objclass(truth_cols_dict['objclass'],'BOSS')
-            truth_cols_dict['z_conf'] = codify_zconf(truth_cols_dict['z_conf'],'BOSS')
+            truth_cols_dict['objclass'] = codify_objclass(truth_cols_dict['objclass'],mode)
+            truth_cols_dict['z_conf'] = codify_zconf(truth_cols_dict['z_conf'],mode)
 
         try:
             bal_cols_dict = {c.lower():h[1][c][:] for c in bal_cols}
