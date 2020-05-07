@@ -74,12 +74,15 @@ isqso = (c_line>args.c_th).sum(axis=0)>=args.n_th
 
 spall = fitsio.FITS(args.spall)
 tids_spall = spall[1]['THING_ID'][:]
-plate_spall = spall[1]['PLATE'][:]
-mjd_spall = spall[1]['MJD'][:]
-fid_spall = spall[1]['FIBERID'][:]
-ra_spall = spall[1]['RA'][:]
-dec_spall = spall[1]['DEC'][:]
-sprim_spall = spall[1]['SPECPRIMARY'][:]
+
+w_spall = np.in1d(tids_spall,tids)
+
+plate_spall = spall[1]['PLATE'][w_spall]
+mjd_spall = spall[1]['MJD'][w_spall]
+fid_spall = spall[1]['FIBERID'][v]
+ra_spall = spall[1]['RA'][w_spall]
+dec_spall = spall[1]['DEC'][w_spall]
+sprim_spall = spall[1]['SPECPRIMARY'][w_spall]
 spall_dict = {(p,m,f):t for t,p,m,f in zip(tids_spall,
     plate_spall, mjd_spall, fid_spall)}
 
