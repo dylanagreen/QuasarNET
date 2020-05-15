@@ -19,7 +19,7 @@ parser.add_argument('--model',type=str,required=True,
 parser.add_argument('--data',type=str,required=True,nargs="*",
         help='the data to be inspected, output of parse_data')
 
-parser.add_argument('--data-training',type=str,required=True,
+parser.add_argument('--data-training',type=str,required=True,nargs="*",
         help='the data used for training')
 
 parser.add_argument('--lmin', type = float, required=False,
@@ -66,7 +66,7 @@ args=parser.parse_args()
 tids,X,plate,mjd,fid = read_data(args.data, return_spid=True)
 
 ## Get the training data.
-tids_train,X_train,plat_traine,mjd_train,fid_train = read_data(args.data_training, return_spid=True)
+tids_train,X_train,plate_train,mjd_train,fid_train = read_data(args.data_training, return_spid=True)
 
 ## Assess how many spectra from the training data are in the test data.
 in_train = in1d(tids, tids_train)
