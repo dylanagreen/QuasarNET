@@ -54,62 +54,44 @@ parser.add_argument('--n-th',type=int,required=False,default=1,
 parser.add_argument('--out-suffix',type=str,required=True,
         help='the output prefix')
 
+parser.add_argument('--make-DRQ', action='store_true', default=False, required=False,
+        help='whether to make the DRQ file or not')
+
 args=parser.parse_args()
 
+## Get the testing data.
 tids,X,plate,mjd,fid = read_data(args.data, return_spid=True)
 
+## Get the training data.
+tids_train,X_train,plat_traine,mjd_train,fid_train = read_data(args.data_training, return_spid=True)
+
+## Assess how many spectra from the training data are in the test data.
+in_train = in1d(tids, tids_train)
+print('INFO: found {} spectra from the training sample in the test sample'.format(in_train.sum()))
+
+## Load the model and predict on the test data.
 m = args.model
 print('loading model {}'.format(m))
 model = load_model(m, custom_objects={'custom_loss':custom_loss})
-
 print('predicting...')
 aux = model.predict(X[:,:,None])
 print('prediction done')
 
+## Load the wavelength grid and process the predictions.
+print('processing preds...')
 wave = Wave(llmin=np.log10(args.lmin),llmax=np.log10(args.lmax),dll=args.dll)
 c_line,z_line,zbest,c_line_bal,z_line_bal =\
         process_preds(aux, args.lines, args.lines_bal,wave=wave)
-
 isqso = (c_line>args.c_th).sum(axis=0)>=args.n_th
+print('processing done')
 
-spall = fitsio.FITS(args.spall)
-tids_spall = spall[1]['THING_ID'][:]
-
-w_spall = np.in1d(tids_spall,tids)
-
-plate_spall = spall[1]['PLATE'][w_spall]
-mjd_spall = spall[1]['MJD'][w_spall]
-fid_spall = spall[1]['FIBERID'][v]
-ra_spall = spall[1]['RA'][w_spall]
-dec_spall = spall[1]['DEC'][w_spall]
-sprim_spall = spall[1]['SPECPRIMARY'][w_spall]
-spall_dict = {(p,m,f):t for t,p,m,f in zip(tids_spall,
-    plate_spall, mjd_spall, fid_spall)}
-
-dic_spall = {t:(r,d,s) for t,r,d,s in zip(tids_spall,ra_spall,
-    dec_spall,sprim_spall)}
-
-spall.close()
-
-h_train=fitsio.FITS(args.data_training)
-plate_train = h_train[1]['PLATE'][:]
-mjd_train = h_train[1]['MJD'][:]
-fid_train = h_train[1]['FIBERID'][:]
-
-tids_train = [spall_dict[(p,m,f)] for p,m,f in zip(plate_train,
-    mjd_train, fid_train) if (p,m,f) in spall_dict]
-
-in_train = in1d(tids, tids_train)
-
-print('INFO: found {} spectra in the training sample'.format(in_train.sum()))
-
+## Make the qnAll file.
+print('making qnAll file...')
 hout=fitsio.FITS('qnAll-'+args.out_suffix+'.fits','rw',clobber=True)
-
 cols = [tids]
 names = ['THING_ID']
 cols += [plate,mjd,fid]
 names += ['PLATE','MJD','FIBERID']
-
 cols += [zbest, isqso.astype(int), in_train.astype(int)]
 names += ['ZBEST','IS_QSO','IN_TRAIN']
 cols.append(c_line.T)
@@ -118,37 +100,48 @@ cols.append(z_line.T)
 names.append('Z_LINES')
 header=[{'name':'LINE_{}'.format(il),'value':absorber_IGM[l],'comment':l} for il,l in enumerate(args.lines)]
 header=[{'name':'LINE_BAL_{}'.format(il),'value':absorber_IGM[l],'comment':l} for il,l in enumerate(args.lines_bal)]
-
 cols.append(c_line_bal.T)
 names.append('C_LINES_BAL')
 cols.append(z_line_bal.T)
 names.append('Z_LINES_BAL')
 hout.write(cols,names=names,header=header)
-
 hout.close()
+print('done')
 
-hout = fitsio.FITS('DRQ_QN-'+args.out_suffix+'.fits',
-            'rw',clobber=True)
-ra = [dic_spall[t][0] for t in tids]
-ra = array(ra)
+## If desired, make the DRQ file.
+if args.make_DRQ:
 
-dec = [dic_spall[t][1] for t in tids]
-dec = array(dec)
+    ## Open the spall file to get supplementary information.
+    print('getting info from spall...')
+    spall = fitsio.FITS(args.spall)
+    tids_spall = spall[1]['THING_ID']
+    ra_spall = spall[1]['RA']
+    dec_spall = spall[1]['DEC']
+    sprim_spall = spall[1]['SPECPRIMARY']
+    tid2dat = {t:(r,d,s) for t,r,d,s in zip(tids_spall,ra_spall,
+        dec_spall,sprim_spall)}
+    spall.close()
+    print('done')
 
-sprim = [dic_spall[t][2] for t in tids]
-sprim = array(sprim)
+    print('making DRQ file...')
+    hout = fitsio.FITS('DRQ_QN-'+args.out_suffix+'.fits',
+                'rw',clobber=True)
+    ra = [tid2dat[t][0] for t in tids]
+    ra = array(ra)
+    dec = [tid2dat[t][1] for t in tids]
+    dec = array(dec)
+    sprim = [tid2dat[t][2] for t in tids]
+    sprim = array(sprim)
+    isqso = isqso & (sprim==1)
 
-isqso = isqso & (sprim==1)
+    print('INFO: found {} unique quasars'.format(isqso.sum()))
 
-print('INFO: found {} unique quasars'.format(isqso.sum()))
-
-cols = [tids[isqso]]
-names = ['THING_ID']
-cols += [plate[isqso], mjd[isqso], fid[isqso]]
-names += ['PLATE','MJD','FIBERID']
-
-isbal = (c_line_bal>args.c_th).sum(axis=0)>=1
-cols += [zbest[isqso], ra[isqso], dec[isqso], isbal[isqso]]
-names += ['Z','RA','DEC','BI_CIV']
-
-hout.write(cols, names=names)
+    cols = [tids[isqso]]
+    names = ['THING_ID']
+    cols += [plate[isqso], mjd[isqso], fid[isqso]]
+    names += ['PLATE','MJD','FIBERID']
+    isbal = (c_line_bal>args.c_th).sum(axis=0)>=1
+    cols += [zbest[isqso], ra[isqso], dec[isqso], isbal[isqso]]
+    names += ['Z','RA','DEC','BI_CIV']
+    hout.write(cols, names=names)
+    print('done')
