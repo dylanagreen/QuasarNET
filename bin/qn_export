@@ -51,8 +51,11 @@ parser.add_argument('--c-th',type=float,required=False,default=0.4,
 parser.add_argument('--n-th',type=int,required=False,default=1,
         help='the threshold number of confident lines to define a quasar')
 
+parser.add_argument('--out-dir',type=str,required=False,default='./',
+        help='the output directory')
+
 parser.add_argument('--out-suffix',type=str,required=True,
-        help='the output prefix')
+        help='the output suffix')
 
 parser.add_argument('--make-DRQ', action='store_true', default=False, required=False,
         help='whether to make the DRQ file or not')
@@ -87,7 +90,7 @@ print('processing done')
 
 ## Make the qnAll file.
 print('making qnAll file...')
-hout=fitsio.FITS('qnAll-'+args.out_suffix+'.fits','rw',clobber=True)
+hout=fitsio.FITS(args.out_dir+'/qnAll-'+args.out_suffix+'.fits','rw',clobber=True)
 cols = [tids]
 names = ['THING_ID']
 cols += [plate,mjd,fid]
@@ -124,7 +127,7 @@ if args.make_DRQ:
     print('done')
 
     print('making DRQ file...')
-    hout = fitsio.FITS('DRQ_QN-'+args.out_suffix+'.fits',
+    hout = fitsio.FITS(args.out_dir+'/DRQ_QN-'+args.out_suffix+'.fits',
                 'rw',clobber=True)
     ra = [tid2dat[t][0] for t in tids]
     ra = array(ra)
