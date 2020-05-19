@@ -409,7 +409,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='
         tb = None
     else:
         targeting_bit_col = utils.get_desi_targeting_bit_col(period)
-        tb = get_targeting_bits('DESI',verbose=False,desi_period=period,desi_cmx_bitname=cmx_bitname)
+        tb = utils.get_targeting_bits('DESI',verbose=False,desi_period=period,desi_cmx_bitname=cmx_bitname)
 
     if not isinstance(fin,list):
         fin = [fin]
