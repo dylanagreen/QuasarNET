@@ -388,7 +388,7 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
 
     return fids, fliv
 
-def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey', llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
+def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey', cmx_bitname='MINI_SV_QSO', llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
 
     '''
     reads data from DESI spectra files (per HEALPix pixel)
@@ -406,14 +406,13 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='
 
     # Obtain the mask from desitarget if available.
     if ignore_quasar_mask:
-        quasar_mask = None
+        tb = None
     else:
-        quasar_mask = utils.get_quasar_mask(verbose=verbose,period=period)
+        targeting_bit_col = utils.get_desi_targeting_bit_col(period)
+        tb = get_targeting_bits('DESI',verbose=False,desi_period=period,desi_cmx_bitname=cmx_bitname)
 
     if not isinstance(fin,list):
         fin = [fin]
-
-    targeting_bit_col = utils.get_desi_targeting_bit_col(period)
 
     tids_list = []
     spid0_list = []
@@ -480,17 +479,18 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='
         print('WARN: no quasar spectra found in given file list.')
         return None
 
-def read_desi_spectra(f, quasar_mask, verbose=True, targeting_bit_col='DESI_TARGET', llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
+def read_desi_spectra(f, tb, verbose=True, llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
 
     tid_field = utils.get_tid_field('DESI')
     spid_fields = utils.get_spectrum_id_fields('DESI')
 
     h = fitsio.FITS(f)
 
-    if quasar_mask is not None:
-        wqso = ((h[1][targeting_bit_col][:] & quasar_mask)>0)
-    else:
-        wqso = np.ones_like(h[1][targeting_bit_col][:]).astype('bool')
+    wqso = np.ones(len(h[1][:])).astype('bool')
+    if tb is not None:
+        for kw,val in tb.items():
+            mask = sum([2**b for b in val])
+            wqso |= ((h[1][kw][:] & 2**bit)>0)
 
     nspec_init = wqso.sum()
     if nspec_init == 0: return None

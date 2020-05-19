@@ -267,25 +267,25 @@ def get_targeting_bits(mode,verbose=True,desi_period='survey',desi_cmx_bitname=N
             import desitarget
             if desi_period=='survey':
                 b = np.log2(desitarget.targetmask.desi_mask.mask('QSO')).astype('int')
-                tb = {'DESI_TARGET': b,
+                tb = {'DESI_TARGET': [b],
                       }
             elif desi_period=='sv':
                 b = np.log2(desitarget.sv1.sv1_targetmask.desi_mask.mask('QSO')).astype('int')
-                tb = {'SV1_DESI_TARGET': b,
+                tb = {'SV1_DESI_TARGET': [b],
                       }
             elif desi_period=='cmx':
                 b = np.log2(desitarget.targetmask.desi_mask.mask(desi_cmx_bitname)).astype('int')
-                tb = {'CMX_TARGET': b,
+                tb = {'CMX_TARGET': [b],
                       }
 
         except ImportError:
             if verbose:
                 print("WARN: can't load desi_mask, using hardcoded targeting value!")
             if desi_period=='survey':
-                tb = {'DESI_TARGET': 2,
+                tb = {'DESI_TARGET': [2],
                       }
             elif desi_period=='sv':
-                tb = {'SV1_DESI_TARGET': 2,
+                tb = {'SV1_DESI_TARGET': [2],
                       }
             elif desi_period=='cmx':
                 if desi_cmx_bitname=='MINI_SV_QSO':
@@ -295,7 +295,7 @@ def get_targeting_bits(mode,verbose=True,desi_period='survey',desi_cmx_bitname=N
                 else:
                     print('ERROR: cmx bit name {} not found, using SV0_QSO'.format(cmx_bitname))
                     b = 55
-                tb = {'CMX_TARGET': b,
+                tb = {'CMX_TARGET': [b],
                       }
 
     return tb
