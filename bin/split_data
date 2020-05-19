@@ -52,7 +52,7 @@ elif (args.training_number is not None):
 ## Choose whether to have independent training or test sets automatically
 ## based on training proportion.
 if args.auto_independent:
-    if args.training_proportion<0.5:
+    if args.training_proportion>=0.5:
         args.independent_test_sets = True
     else:
         args.independent_training_sets = True
