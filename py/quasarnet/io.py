@@ -486,7 +486,7 @@ def read_desi_spectra(f, tb, verbose=True, llmin=np.log10(3600.), llmax=np.log10
 
     h = fitsio.FITS(f)
 
-    wqso = np.ones(len(h[1][:])).astype('bool')
+    wqso = np.zeros(len(h[1][:])).astype('bool')
     if tb is not None:
         for kw,val in tb.items():
             mask = sum([2**b for b in val])
