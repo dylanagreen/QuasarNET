@@ -425,7 +425,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='
 
     for i,f in enumerate(fin):
 
-        aux = read_desi_spectra(f, quasar_mask, verbose=verbose, targeting_bit_col=targeting_bit_col, llmin=llmin, llmax=llmax, dll=dll)
+        aux = read_desi_spectra(f, tb, verbose=verbose, llmin=llmin, llmax=llmax, dll=dll)
 
         if aux:
             tids, spid0, spid1, spid2, fl, iv = aux
