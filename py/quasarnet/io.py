@@ -490,7 +490,9 @@ def read_desi_spectra(f, tb, verbose=True, llmin=np.log10(3600.), llmax=np.log10
     if tb is not None:
         for kw,val in tb.items():
             mask = sum([2**b for b in val])
-            wqso |= ((h[1][kw][:] & mask)>0)
+            wqso_kw = ((mask & h[1][kw[:]])>0)
+            print('INFO: found {} quasar targets with target bits {} in {}'.format(wqso_kw.sum(),val,kw))
+            wqso |= wqso_kw
 
     nspec_init = wqso.sum()
     if nspec_init == 0: return None
