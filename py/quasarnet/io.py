@@ -490,7 +490,7 @@ def read_desi_spectra(f, tb, verbose=True, llmin=np.log10(3600.), llmax=np.log10
     if tb is not None:
         for kw,val in tb.items():
             mask = sum([2**b for b in val])
-            wqso |= ((h[1][kw][:] & 2**bit)>0)
+            wqso |= ((h[1][kw][:] & mask)>0)
 
     nspec_init = wqso.sum()
     if nspec_init == 0: return None
