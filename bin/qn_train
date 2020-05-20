@@ -72,8 +72,6 @@ if args.save_epoch_checkpoints:
 else:
     callbacks_list = []
 
-print(callbacks_list)
-
 ## Fit the model using specified hyper-parameters.
 print( "starting fit")
 history = model.fit(X[:,:,None], box,
