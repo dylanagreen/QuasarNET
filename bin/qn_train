@@ -31,7 +31,7 @@ parser.add_argument('--lmax', type = float, required=False,
 parser.add_argument('--dll', type = float, required=False,
         default = 1.e-3)
 parser.add_argument("--offset-activation-function", type = str,
-        choices = ['sigmoid','rescaled_simoid','linear'],
+        choices = ['sigmoid','rescaled_sigmoid','linear'],
         default='rescaled_simoid', required=False)
 
 args = parser.parse_args()

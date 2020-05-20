@@ -2,15 +2,15 @@
 
 import glob
 from tensorflow.keras.models import load_model
-from quasarnet.models import custom_loss
-from quasarnet.io import read_data
 from scipy.interpolate import interp1d
 from numpy import in1d, array
-from quasarnet.io import read_data
-from quasarnet.utils import absorber_IGM, process_preds, Wave
 import fitsio
 import argparse
 import numpy as np
+
+from quasarnet.io import read_data
+from quasarnet.models import custom_loss
+from quasarnet.utils import absorber_IGM, process_preds, Wave
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--model',type=str,required=True,
