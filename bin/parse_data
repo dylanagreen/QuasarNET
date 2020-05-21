@@ -159,7 +159,6 @@ results = []
 if __name__ == '__main__':
     pool = Pool(processes=args.nproc)
     results = []
-    start_time = time.time()
     for task in plate_mjd:
         pool.apply_async(load_plate,task,callback=log_result,error_callback=log_error)
     pool.close()
