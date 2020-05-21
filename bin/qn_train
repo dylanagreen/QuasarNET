@@ -65,7 +65,7 @@ box, sample_weight = io.objective(z,Y,bal,lines=args.lines,
 
 ## If desired, make checkpoint at each epoch.
 if args.save_epoch_checkpoints:
-    from keras.callbacks import ModelCheckpoint
+    from tensorflow.keras.callbacks import ModelCheckpoint
     filepath = args.out_prefix+"-epoch{epoch:03d}.h5"
     checkpoint = ModelCheckpoint(filepath,verbose=1)
     callbacks_list = [checkpoint]

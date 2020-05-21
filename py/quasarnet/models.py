@@ -10,8 +10,7 @@ from tensorflow.keras.initializers import glorot_uniform, glorot_uniform
 from tensorflow.keras import regularizers
 from tensorflow.keras.activations import softmax, relu
 
-def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc=0,
-              offset_activation_function='rescaled_simoid'):
+def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc=0, offset_activation_function='rescaled_sigmoid'):
 
     X_input = Input(input_shape)
     X = X_input
@@ -53,7 +52,7 @@ def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc
     X_box = []
     if offset_activation_function=='sigmoid':
         tf_activation_function = 'sigmoid'
-    elif offset_activation_function=='rescaled_simoid':
+    elif offset_activation_function=='rescaled_sigmoid':
         tf_activation_function = 'sigmoid'
     elif offset_activation_function=='linear':
         tf_activation_function = 'linear'
@@ -68,7 +67,7 @@ def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc
                 name='fc_offset_{}'.format(i),
                 kernel_initializer=glorot_uniform())(X)
 
-        if offset_activation_function in ['rescaled_simoid','linear']:
+        if offset_activation_function in ['rescaled_sigmoid','linear']:
             ## Rescale the offsets to output between -0.1 and 1.1.
             X_offset_aux = Lambda(lambda x:-0.1+1.2*x)(X_offset_aux)
 
