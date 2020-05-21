@@ -148,7 +148,7 @@ def log_result(retval):
     results.append(retval)
     N_complete = len(results)
     N_tasks = len(plate_mjd)
-    print('INFO: Read {:5d} files out of {:5d}...'.format(nread,len(plate_mjd)),end='\r')
+    print('INFO: Read {:5d} files out of {:5d}...'.format(N_complete,N_tasks,end='\r')
     return
 def log_error(retval):
     print('Error:',retval)
