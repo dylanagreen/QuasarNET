@@ -100,7 +100,7 @@ mjd = []
 fibs = []
 nread = 0
 
-def load_plate(p,m):
+def load_plate(p,m,args):
     # Find all entries in args.spplates which contain information about this
     # (plate,mjd) pair. If no files are found, or if more than one file is
     # found, print a warning and exit.
@@ -120,7 +120,6 @@ def load_plate(p,m):
     # Read the spPlate file found, using the list of relevant fibers from the
     # plate_mjd dictionary.
     f = f[0]
-    nread += 1
     fibers = plate_mjd[(p,m)]
 
     # Read data, either directly from the spPlate file or via spCFrame files.
@@ -141,30 +140,36 @@ def load_plate(p,m):
             llmin=np.log10(args.lmin), llmax=np.log10(args.lmax), dll=args.dll,
             )
 
-    return aux
+    return p,m,aux
 
 #Define a progress- and error-tracking functions.
 def log_result(retval):
     results.append(retval)
     N_complete = len(results)
-    N_tasks = len(plate_mjd)
+    N_tasks = len(tasks)
     print('INFO: Read {:5d} files out of {:5d}...'.format(N_complete,N_tasks),end='\r')
     return
 def log_error(retval):
     print('Error:',retval)
     return
 
+tasks = [(p,m,args) for (p,m) in plate_mjd]
 results = []
 #Run the multiprocessing pool
 if __name__ == '__main__':
     pool = Pool(processes=args.nproc)
     results = []
-    for task in plate_mjd:
+    for task in tasks:
         pool.apply_async(load_plate,task,callback=log_result,error_callback=log_error)
     pool.close()
     pool.join()
 
-for aux in results:
+print(' ')
+
+for result in results:
+    p = result[0]
+    m = result[1]
+    aux = result[2]
     # If data is read, add it to the data structures.
     if aux is not None:
         tids_plate = [thid_db[(p,m,fib)] for fib in aux[0]]
