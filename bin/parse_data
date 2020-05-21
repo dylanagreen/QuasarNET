@@ -6,6 +6,7 @@ import fitsio
 #from astropy.io import fits
 import sys
 import argparse
+from multiprocessing import Pool
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--spplates',type=str, nargs="+", required=True)
@@ -31,6 +32,8 @@ parser.add_argument('--random-seed', type = int, required=False,
                     default = 0)
 parser.add_argument('--verbose', action='store_true', default=False,
                     required=False)
+parser.add_argument('--nproc', type = int, required=False,
+                    default = 1)
 
 args=parser.parse_args()
 
@@ -97,7 +100,7 @@ mjd = []
 fibs = []
 nread = 0
 
-for p,m in plate_mjd:
+def load_plate(p,m):
     # Find all entries in args.spplates which contain information about this
     # (plate,mjd) pair. If no files are found, or if more than one file is
     # found, print a warning and exit.
@@ -117,7 +120,6 @@ for p,m in plate_mjd:
     # Read the spPlate file found, using the list of relevant fibers from the
     # plate_mjd dictionary.
     f = f[0]
-    print('Reading file {}, nread={:5d}, ntot={:5d}'.format(f,nread,len(plate_mjd)),end='\r')
     nread += 1
     fibers = plate_mjd[(p,m)]
 
@@ -139,6 +141,31 @@ for p,m in plate_mjd:
             llmin=np.log10(args.lmin), llmax=np.log10(args.lmax), dll=args.dll,
             )
 
+    return aux
+
+#Define a progress- and error-tracking functions.
+def log_result(retval):
+    results.append(retval)
+    N_complete = len(results)
+    N_tasks = len(plate_mjd)
+    print('INFO: Read {:5d} files out of {:5d}...'.format(nread,len(plate_mjd)),end='\r')
+    return
+def log_error(retval):
+    print('Error:',retval)
+    return
+
+results = []
+#Run the multiprocessing pool
+if __name__ == '__main__':
+    pool = Pool(processes=args.nproc)
+    results = []
+    start_time = time.time()
+    for task in plate_mjd:
+        pool.apply_async(load_plate,task,callback=log_result,error_callback=log_error)
+    pool.close()
+    pool.join()
+
+for aux in results:
     # If data is read, add it to the data structures.
     if aux is not None:
         tids_plate = [thid_db[(p,m,fib)] for fib in aux[0]]
