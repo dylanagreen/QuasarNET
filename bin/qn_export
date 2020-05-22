@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import time
 import glob
 from tensorflow.keras.models import load_model
 from scipy.interpolate import interp1d
@@ -80,8 +81,10 @@ m = args.model
 print('loading model {}'.format(m))
 model = load_model(m, custom_objects={'custom_loss':custom_loss})
 print('predicting...')
+start = time.time()
 aux = model.predict(X[:,:,None])
 print('prediction done')
+print('took {:3.1f}s'.format(start-time.time()))
 
 ## Load the wavelength grid and process the predictions.
 print('processing preds...')

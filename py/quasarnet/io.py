@@ -158,12 +158,20 @@ def read_spall(spall):
     '''
 
     ## Open the file, and read plate, mjd, fiberid, thing_id, specprimary.
-    spall = fitsio.FITS(spall)
-    plate = spall[1]["PLATE"][:]
-    mjd = spall[1]["MJD"][:]
-    fid = spall[1]["FIBERID"][:]
-    tid = spall[1]["THING_ID"][:].astype(int)
-    specprim = spall[1]["SPECPRIMARY"][:]
+    #spall = fitsio.FITS(spall)
+    #plate = spall[1]["PLATE"][:]
+    #mjd = spall[1]["MJD"][:]
+    #fid = spall[1]["FIBERID"][:]
+    #tid = spall[1]["THING_ID"][:].astype(int)
+    #specprim = spall[1]["SPECPRIMARY"][:]
+
+    ## Much faster in astropy.
+    spall = fits.open(spall)
+    plate = spall[1].data['PLATE']
+    mjd = spall[1].data['MJD']
+    fid = spall[1].data['FIBERID']
+    tid = spall[1].data['THING_ID'].astype(int)
+    specprim = spall[1].data['SPECPRIMARY']
 
     ## Construct a dictionary mapping plate, mjd and fiberid to thing_id.
     pmf2tid = {(p,m,f):t for p,m,f,t,s in zip(plate,mjd,fid,tid,specprim)}
