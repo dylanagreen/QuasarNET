@@ -63,7 +63,7 @@ parser.add_argument('--make-DRQ', action='store_true', default=False, required=F
 args=parser.parse_args()
 
 if args.make_DRQ and args.spall is None:
-    raise ValueError('Need a spall file to make DRQ.')
+    raise ValueError('Need a spAll file to make DRQ.')
 
 ## Get the testing data.
 tids,X,plate,mjd,fid = read_data(args.data, return_spid=True)
