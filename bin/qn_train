@@ -5,6 +5,7 @@ import fitsio
 
 from quasarnet.models import QuasarNET, custom_loss
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import ModelCheckpoint
 from quasarnet import io
 
 parser = argparse.ArgumentParser()
@@ -33,6 +34,8 @@ parser.add_argument('--dll', type = float, required=False,
 parser.add_argument("--offset-activation-function", type = str,
         choices = ['sigmoid','rescaled_sigmoid','linear'],
         default='rescaled_sigmoid', required=False)
+parser.add_argument("--amsgrad", action='store_true',
+        default=False, required=False)
 
 args = parser.parse_args()
 
@@ -55,7 +58,7 @@ for i in args.lines_bal:
     loss.append(custom_loss)
 
 ## Set up the minimisation procedure.
-adam = Adam(decay=args.decay)
+adam = Adam(decay=args.decay,amsgrad=args.amsgrad)
 model.compile(optimizer=adam, loss=loss, metrics=[])
 
 ## Construct the objective for the training data.
@@ -63,14 +66,20 @@ box, sample_weight = io.objective(z,Y,bal,lines=args.lines,
         lines_bal=args.lines_bal,nboxes=args.boxes,llmin=np.log10(args.lmin),
         llmax=np.log10(args.lmax),dll=args.dll)
 
+## Set a checkpoint to save the model at epochs with lowest loss.
+best_model_callback = ModelCheckpoint(
+    filepath=args.out_prefix+"-best.h5",
+    save_weights_only=False,
+    monitor='loss',
+    mode='min',
+    save_best_only=True)
+callbacks_list = [best_model_callback]
+
 ## If desired, make checkpoint at each epoch.
 if args.save_epoch_checkpoints:
-    from tensorflow.keras.callbacks import ModelCheckpoint
     filepath = args.out_prefix+"-epoch{epoch:03d}.h5"
     checkpoint = ModelCheckpoint(filepath,verbose=1)
-    callbacks_list = [checkpoint]
-else:
-    callbacks_list = []
+    callbacks_list += [checkpoint]
 
 ## Fit the model using specified hyper-parameters.
 print( "starting fit")
