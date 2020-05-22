@@ -85,7 +85,6 @@ else:
 plate_mjd = {}
 for i,(p,m,f) in enumerate(np.array(pmf_spall)[wqso]):
     sys.stderr.write('\rINFO: populating dict: {:.1%}'.format(i/len(pmf_spall)))
-
     k = (p,m)
     if not k in plate_mjd:
         plate_mjd[k] = []
@@ -154,7 +153,6 @@ def log_error(retval):
     return
 
 tasks = [(p,m,args) for (p,m) in plate_mjd]
-results = []
 #Run the multiprocessing pool
 if __name__ == '__main__':
     pool = Pool(processes=args.nproc)
