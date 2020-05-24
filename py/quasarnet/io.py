@@ -855,7 +855,7 @@ def read_truth(fi,mode='BOSS'):
 
     return truth
 
-def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None):
+def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, verbose=True):
     '''
     reads data from input file
 
@@ -890,23 +890,27 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None):
         spid2 = []
 
     for f in fi:
-        print('INFO: reading data from {}'.format(f))
+        if verbose:
+            print('INFO: reading data from {}'.format(f))
         h = fitsio.FITS(f)
         if nspec is None:
             nspec = h[1].get_nrows()
         aux_tids = h[1]['TARGETID'][:nspec].astype(int)
-        print("INFO: found {} spectra in file {}".format(aux_tids.shape[0], f))
+        if verbose:
+            print("INFO: found {} spectra in file {}".format(aux_tids.shape[0], f))
 
         ## remove thing_id == -1 or not in sdrq
         w = (aux_tids != -1)
-        print("INFO: removing {} spectra with thing_id=-1".format((~w).sum()),flush=True)
+        if verbose:
+            print("INFO: removing {} spectra with thing_id=-1".format((~w).sum()),flush=True)
         aux_tids = aux_tids[w]
         aux_X = h[0][:nspec,:]
         aux_X = aux_X[w,:]
 
         if truth is not None:
             w_in_truth = np.in1d(aux_tids, list(truth.keys()))
-            print("INFO: removing {} spectra missing in truth".format((~w_in_truth).sum()),flush=True)
+            if verbose:
+                print("INFO: removing {} spectra missing in truth".format((~w_in_truth).sum()),flush=True)
             aux_tids = aux_tids[w_in_truth]
             aux_X = aux_X[w_in_truth]
 
@@ -938,11 +942,13 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None):
     ncells = X.shape[1]/2.
     assert ncells==round(ncells)
     ncells = round(ncells)
-    print('INFO: Spectra have {} cells'.format(ncells))
+    if verbose:
+        print('INFO: Spectra have {} cells'.format(ncells))
 
     we = X[:,ncells:]
     w = we.sum(axis=1)==0
-    print("INFO: removing {} spectra with zero weights".format(w.sum()))
+    if verbose:
+        print("INFO: removing {} spectra with zero weights".format(w.sum()))
     X = X[~w]
     tids = tids[~w]
 
@@ -957,7 +963,8 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None):
     sdata=np.sqrt(sdata)
 
     w = sdata == 0
-    print("INFO: removing {} spectra with zero flux".format(w.sum()))
+    if verbose:
+        print("INFO: removing {} spectra with zero flux".format(w.sum()))
     X = X[~w]
     tids = tids[~w]
     mdata = mdata[~w]
@@ -980,7 +987,8 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None):
     ## remove zconf == 0 (not inspected)
     observed = [(truth[t].objclass>0) or (truth[t].z_conf>0) for t in tids]
     observed = np.array(observed, dtype=bool)
-    print("INFO: removing {} spectra that were not inspected".format((~np.array(observed)).sum()))
+    if verbose:
+        print("INFO: removing {} spectra that were not inspected".format((~np.array(observed)).sum()))
     tids = tids[observed]
     X = X[observed]
 
@@ -1009,7 +1017,8 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None):
     ## check that all spectra have exactly one classification
     assert (Y.sum(axis=1).min()==1) and (Y.sum(axis=1).max()==1)
 
-    print("INFO: {} spectra in returned dataset".format(tids.shape[0]))
+    if verbose:
+        print("INFO: {} spectra in returned dataset".format(tids.shape[0]))
 
     if return_spid:
         return tids,X,Y,z,bal,spid0,spid1,spid2
