@@ -61,16 +61,21 @@ parser.add_argument('--out-suffix',type=str,required=True,
 parser.add_argument('--make-DRQ', action='store_true', default=False, required=False,
         help='whether to make the DRQ file or not')
 
+parser.add_argument('--mode', type = str, required=False, default='BOSS',
+                    choices=['BOSS','DESI','DESI_SPECTRA','DESI_COADD','DESI_SIM'])
+
 args=parser.parse_args()
 
 if args.make_DRQ and args.spall is None:
     raise ValueError('Need a spAll file to make DRQ.')
 
+spid_fields = utils.get_spectrum_id_fields(args.mode)
+
 ## Get the testing data.
-tids,X,plate,mjd,fid = read_data(args.data, return_spid=True)
+tids,X,spid0,spid1,spid2 = read_data(args.data, return_spid=True)
 
 ## Get the training data.
-tids_train,X_train,plate_train,mjd_train,fid_train = read_data(args.data_training, return_spid=True)
+tids_train,X_train,spid0_train,spid1_train,spid2_train = read_data(args.data_training, return_spid=True)
 
 ## Assess how many spectra from the training data are in the test data.
 in_train = in1d(tids, tids_train)
@@ -99,8 +104,8 @@ print('making qnAll file...')
 hout=fitsio.FITS(args.out_dir+'/qnAll-'+args.out_suffix+'.fits','rw',clobber=True)
 cols = [tids]
 names = ['THING_ID']
-cols += [plate,mjd,fid]
-names += ['PLATE','MJD','FIBERID']
+cols += [spid0,spid1,spid2]
+names += [spid_fields['SPID0'],spid_fields['SPID1'],spid_fields['SPID2']]
 cols += [zbest, isqso.astype(int), in_train.astype(int)]
 names += ['ZBEST','IS_QSO','IN_TRAIN']
 cols.append(c_line.T)
@@ -147,8 +152,8 @@ if args.make_DRQ:
 
     cols = [tids[isqso]]
     names = ['THING_ID']
-    cols += [plate[isqso], mjd[isqso], fid[isqso]]
-    names += ['PLATE','MJD','FIBERID']
+    cols += [spid0[isqso],spid1[isqso],spid2[isqso]]
+    names += [spid_fields['SPID0'],spid_fields['SPID1'],spid_fields['SPID2']]
     isbal = (c_line_bal>args.c_th).sum(axis=0)>=1
     cols += [zbest[isqso], ra[isqso], dec[isqso], isbal[isqso]]
     names += ['Z','RA','DEC','BI_CIV']
