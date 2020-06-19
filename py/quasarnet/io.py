@@ -90,6 +90,14 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
         hr[1].read()*((hr[2].read()&2**25)==0)])
     wave_aux = np.hstack([10**hb[3].read(), 10**hr[3].read()])
 
+    ### HACK
+    # Full mask option
+    #iv_aux = np.hstack([hb[1].read()*(hb[2].read()==0),
+    #    hr[1].read()*(hr[2].read()==0)])
+    # No mask option
+    #iv_aux = np.hstack([hb[1].read(),hr[1].read()])
+    ###
+
     ## Filter the data by those we're interested in.
     plate = hb[0].read_header()["PLATEID"]
     fids = hb[5]["FIBERID"][:]
@@ -340,6 +348,10 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
         gen = np.random.RandomState(seed=[head["PLATEID"],head["MJD"],random_seed])
         gen.shuffle(expids)
 
+        ### HACK
+        #expids = ['00104927']
+        ###
+
         ## For each expid:
         ind = 0
         exit = False
@@ -356,6 +368,9 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
                 if (isfile(b_exp) and isfile(r_exp)):
                     spcframe_pairs_found += 1
 
+            if spcframe_pairs_found<nspcframe_pairs:
+                print('WARN: only {} spcframe pairs found for expid {} in {}, moving to next exp...'.format(spcframe_pairs_found,fin,expid))
+            
             # If so, add exposures to the list of infiles.
             if spcframe_pairs_found==nspcframe_pairs:
                 for s in spectros:
@@ -384,6 +399,7 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
 
     fids = []
     fliv = []
+    #print(spcframes)
     for spcframe in spcframes:
         aux = read_spcframe(spcframe[0], spcframe[1], fibers, verbose=False,
             llmin=llmin, llmax=llmax, dll=dll)
