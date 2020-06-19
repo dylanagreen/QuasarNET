@@ -11,7 +11,7 @@ import numpy as np
 
 from quasarnet.io import read_data
 from quasarnet.models import custom_loss
-from quasarnet.utils import absorber_IGM, process_preds, Wave
+from quasarnet.utils import absorber_IGM, get_spectrum_id_fields, process_preds, Wave
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--model',type=str,required=True,
@@ -69,7 +69,7 @@ args=parser.parse_args()
 if args.make_DRQ and args.spall is None:
     raise ValueError('Need a spAll file to make DRQ.')
 
-spid_fields = utils.get_spectrum_id_fields(args.mode)
+spid_fields = get_spectrum_id_fields(args.mode)
 
 ## Get the testing data.
 tids,X,spid0,spid1,spid2 = read_data(args.data, return_spid=True)
