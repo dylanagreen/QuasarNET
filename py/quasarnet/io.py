@@ -396,7 +396,7 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
 
     return fids, fliv
 
-def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey', cmx_bitname='MINI_SV_QSO', llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
+def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='survey', cmx_bitname='MINI_SV_QSO', llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3, mode='DESI'):
 
     '''
     reads data from DESI spectra files (per HEALPix pixel)
@@ -432,7 +432,7 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='
 
     for i,f in enumerate(fin):
 
-        aux = read_desi_spectra(f, tb, verbose=verbose, llmin=llmin, llmax=llmax, dll=dll)
+        aux = read_desi_spectra(f, tb, verbose=verbose, llmin=llmin, llmax=llmax, dll=dll, mode=mode)
 
         if aux:
             tids, spid0, spid1, spid2, fl, iv = aux
@@ -486,10 +486,10 @@ def read_desi_spectra_list(fin, ignore_quasar_mask=False, verbose=True, period='
         print('WARN: no quasar spectra found in given file list.')
         return None
 
-def read_desi_spectra(f, tb, verbose=True, llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3):
+def read_desi_spectra(f, tb, verbose=True, llmin=np.log10(3600.), llmax=np.log10(9800.), dll=1.e-3, mode='DESI'):
 
-    tid_field = utils.get_tid_field('DESI')
-    spid_fields = utils.get_spectrum_id_fields('DESI')
+    tid_field = utils.get_tid_field(mode)
+    spid_fields = utils.get_spectrum_id_fields(mode)
 
     h = fitsio.FITS(f)
 
