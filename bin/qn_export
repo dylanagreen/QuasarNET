@@ -69,6 +69,7 @@ args=parser.parse_args()
 if args.make_DRQ and args.spall is None:
     raise ValueError('Need a spAll file to make DRQ.')
 
+tid_field = get_tid_field(args.mode)
 spid_fields = get_spectrum_id_fields(args.mode)
 
 ## Get the testing data.
@@ -103,7 +104,7 @@ print('processing done')
 print('making qnAll file...')
 hout=fitsio.FITS(args.out_dir+'/qnAll-'+args.out_suffix+'.fits','rw',clobber=True)
 cols = [tids]
-names = ['THING_ID']
+names = [tid_field['TARGETID']]
 cols += [spid0,spid1,spid2]
 names += [spid_fields['SPID0'],spid_fields['SPID1'],spid_fields['SPID2']]
 cols += [zbest, isqso.astype(int), in_train.astype(int)]
@@ -151,7 +152,7 @@ if args.make_DRQ:
     print('INFO: found {} unique quasars'.format(isqso.sum()))
 
     cols = [tids[isqso]]
-    names = ['THING_ID']
+    names = [tid_field['TARGETID']]
     cols += [spid0[isqso],spid1[isqso],spid2[isqso]]
     names += [spid_fields['SPID0'],spid_fields['SPID1'],spid_fields['SPID2']]
     isbal = (c_line_bal>args.c_th).sum(axis=0)>=1
