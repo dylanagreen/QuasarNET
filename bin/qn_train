@@ -36,6 +36,8 @@ parser.add_argument("--offset-activation-function", type = str,
         default='rescaled_sigmoid', required=False)
 parser.add_argument("--amsgrad", action='store_true',
         default=False, required=False)
+parser.add_argument("--shuffle", action='store_true',
+        default=False, required=False)
 
 args = parser.parse_args()
 
@@ -88,7 +90,7 @@ history = model.fit(X[:,:,None], box,
         batch_size = 256,
         sample_weight = sample_weight,
         callbacks = callbacks_list,
-        #shuffle = True,
+        shuffle = args.shuffle,
         #validation_split = 0.2,
         #use_multiprocessing = True,
         )
