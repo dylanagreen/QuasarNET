@@ -64,6 +64,9 @@ parser.add_argument('--make-DRQ', action='store_true', default=False, required=F
 parser.add_argument('--mode', type = str, required=False, default='BOSS',
                     choices=['BOSS','DESI','DESI_SPECTRA','DESI_COADD','DESI_SIM'])
 
+parser.add_argument('--model-type', type = str, required=False, default='boxes',
+                    choices=['boxes','noboxes'])
+
 args=parser.parse_args()
 
 if args.make_DRQ and args.spall is None:
@@ -85,7 +88,11 @@ print('INFO: found {} spectra from the training sample in the test sample'.forma
 ## Load the model and predict on the test data.
 m = args.model
 print('loading model {}'.format(m))
-model = load_model(m, custom_objects={'custom_loss':custom_loss})
+if args.model_type == 'noboxes':
+    custom_objects = {}
+elif args.model_type == 'boxes':
+    custom_objects={'custom_loss':custom_loss}
+model = load_model(m, custom_objects=custom_objects)
 print('predicting...')
 start = time.time()
 aux = model.predict(X[:,:,None])
@@ -96,7 +103,7 @@ print('took {:3.1f}s'.format(start-time.time()))
 print('processing preds...')
 wave = Wave(llmin=np.log10(args.lmin),llmax=np.log10(args.lmax),dll=args.dll)
 c_line,z_line,zbest,c_line_bal,z_line_bal =\
-        process_preds(aux, args.lines, args.lines_bal,wave=wave)
+        process_preds(aux, args.lines, args.lines_bal,wave=wave,mode=args.model_type)
 isqso = (c_line>args.c_th).sum(axis=0)>=args.n_th
 print('processing done')
 

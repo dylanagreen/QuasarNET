@@ -2,7 +2,7 @@ from scipy.interpolate import interp1d
 from numpy import zeros, arange, array
 import numpy as np
 
-def process_preds(preds, lines, lines_bal, wave=None):
+def process_preds(preds, lines, lines_bal, wave=None, model_type='boxes'):
     '''
     Convert network predictions to c_lines, z_lines and z_best
 
@@ -43,19 +43,7 @@ def process_preds(preds, lines, lines_bal, wave=None):
 
     # For each line, fill in the output array. Done for all spectra at once.
     for il in range(len(lines)):
-        c_line[il], z_line[il] = line_preds_to_properties(preds[il],lines[il],wave=wave)
-
-        """
-        ## Rest frame wavelength of line.
-        l = absorber_IGM[lines[il]]
-        ## Index of most likely box.
-        j = preds[il][:,:13].argmax(axis=1)
-        ## Offset within this box.
-        offset = preds[il][arange(nspec, dtype=int), nboxes+j]
-        ## Put the confidence and redshift for the line into the output array.
-        c_line[il] = preds[il][:,:13].max(axis=1)
-        z_line[il] = i_to_wave((j+offset)*len(wave)/nboxes)/l - 1
-        """
+        c_line[il], z_line[il] = line_preds_to_properties(preds[il],lines[il],wave=wave,model_type=model_type)
 
     # Get the best estimate of z from the most confident line
     zbest = z_line[c_line.argmax(axis=0),arange(nspec)]
@@ -66,19 +54,11 @@ def process_preds(preds, lines, lines_bal, wave=None):
     z_line_bal=zeros((nlines_bal, nspec))
 
     for il in range(len(lines_bal)):
-        c_line_bal[il], z_line_bal[il] = line_preds_to_properties(preds[nlines+il],lines_bal[il],wave=wave)
-
-        """
-        l = absorber_IGM[lines_bal[il]]
-        j = preds[nlines+il][:,:nboxes].argmax(axis=1)
-        offset = preds[nlines+il][arange(nspec, dtype=int), nboxes+j]
-        c_line_bal[il] = preds[il+nlines][:,:nboxes].max(axis=1)
-        z_line_bal[il] = i_to_wave((j+offset)*len(wave)/nboxes)/l-1
-        """
+        c_line_bal[il], z_line_bal[il] = line_preds_to_properties(preds[nlines+il],lines_bal[il],wave=wave,model_type=model_type)
 
     return c_line, z_line, zbest, c_line_bal, z_line_bal
 
-def line_preds_to_properties(line_preds,line,wave=None):
+def line_preds_to_properties(line_preds,line,wave=None, model_type='boxes'):
     '''
     Convert network predictions for 1 line to c_line, z_line.
 
@@ -96,9 +76,6 @@ def line_preds_to_properties(line_preds,line,wave=None):
         line redshifts, shape: (nspec, )
     '''
 
-    nspec, nboxes = line_preds.shape
-    nboxes //= 2
-
     # Construct an interpolator to go from the index along a wave vector to the
     # wavelength associated with this position.
     if wave is None:
@@ -108,16 +85,27 @@ def line_preds_to_properties(line_preds,line,wave=None):
     i_to_wave = interp1d(arange(len(wave.wave_grid)), wave.wave_grid,
             bounds_error=False, fill_value='extrapolate')
 
-    # Fill in the output array. Done for all spectra at once.
-    ## Rest frame wavelength of line.
-    l = absorber_IGM[line]
-    ## Index of most likely box.
-    j = line_preds[:,:nboxes].argmax(axis=1)
-    ## Offset within this box.
-    offset = line_preds[arange(nspec, dtype=int), nboxes+j]
-    ## Put the confidence and redshift for the line into the output array.
-    c_line = line_preds[:,:nboxes].max(axis=1)
-    z_line = i_to_wave((j+offset)*len(wave.wave_grid)/nboxes)/l - 1
+    if model_type == 'boxes':
+        nspec, nboxes = line_preds.shape
+        nboxes //= 2
+
+        # Fill in the output array. Done for all spectra at once.
+        ## Rest frame wavelength of line.
+        l = absorber_IGM[line]
+        ## Index of most likely box.
+        j = line_preds[:,:nboxes].argmax(axis=1)
+        ## Offset within this box.
+        offset = line_preds[arange(nspec, dtype=int), nboxes+j]
+        ## Put the confidence and redshift for the line into the output array.
+        c_line = line_preds[:,:nboxes].max(axis=1)
+        z_line = i_to_wave((j+offset)*len(wave.wave_grid)/nboxes)/l - 1
+
+    elif model_type == 'noboxes':
+
+        l = absorber_IGM[line]
+        j = line_preds.argmax(axis=1)
+        c_line = line_preds.max(axis=1)
+        z_line = i_to_wave(j)/l-1
 
     return c_line, z_line
 
