@@ -11,7 +11,7 @@ import numpy as np
 
 from quasarnet.io import read_data
 from quasarnet.models import custom_loss
-from quasarnet.utils import absorber_IGM, get_spectrum_id_fields, process_preds, Wave
+from quasarnet.utils import absorber_IGM, get_spectrum_id_fields, get_tid_field, process_preds, Wave
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--model',type=str,required=True,
@@ -103,7 +103,7 @@ print('took {:3.1f}s'.format(start-time.time()))
 print('processing preds...')
 wave = Wave(llmin=np.log10(args.lmin),llmax=np.log10(args.lmax),dll=args.dll)
 c_line,z_line,zbest,c_line_bal,z_line_bal =\
-        process_preds(aux, args.lines, args.lines_bal,wave=wave,mode=args.model_type)
+        process_preds(aux, args.lines, args.lines_bal,wave=wave,model_type=args.model_type)
 isqso = (c_line>args.c_th).sum(axis=0)>=args.n_th
 print('processing done')
 
