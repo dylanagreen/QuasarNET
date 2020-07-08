@@ -127,7 +127,7 @@ def line_preds_to_properties(line_preds,line,wave=None, model_type='boxes'):
         # Determine redshift by
         wave_edges = np.concatenate([[wave.wave_grid[0]-(wave.wave_grid[1]-wave.wave_grid[0])/2], (wave.wave_grid[1:]+wave.wave_grid[:-1])/2., [wave.wave_grid[-1]+(wave.wave_grid[-1]-wave.wave_grid[-2])/2]])
         wave_widths = wave_edges[1:] - wave_edges[:-1]
-        z_line = ((line_preds*wave.wave_grid[None,:]*wave_widths[None,:]).sum(axis=1)/(line_preds*wave_widths[None,:]).sum(axis=1))/1215.67 - 1
+        z_line = ((line_preds*wave.wave_grid[None,:]*wave_widths[None,:]).sum(axis=1)/(line_preds*wave_widths[None,:]).sum(axis=1))/l - 1
 
     return c_line, z_line
 
