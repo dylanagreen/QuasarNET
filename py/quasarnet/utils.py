@@ -102,10 +102,32 @@ def line_preds_to_properties(line_preds,line,wave=None, model_type='boxes'):
 
     elif model_type == 'noboxes':
 
+        #######################################################################
+        ### JAF: This is the default. However, it means we can only predict a
+        ### redshift that corresponds to a point in our wavelength grid.
+        #######################################################################
+
+        """
         l = absorber_IGM[line]
         j = line_preds.argmax(axis=1)
         c_line = line_preds.max(axis=1)
         z_line = i_to_wave(j)/l-1
+        """
+
+        #######################################################################
+        ### JAF: Alternatively, we can use the predicted values in all cells to
+        ### compute a mean (need to use wavelength grid cell widths to ensure
+        ### no bias).
+        #######################################################################
+
+        # For the moment, use the same method of determining confidence.
+        l = absorber_IGM[line]
+        c_line = line_preds.max(axis=1)
+
+        # Determine redshift by
+        wave_edges = np.concatenate([[wave.wave_grid[0]-(wave.wave_grid[1]-wave.wave_grid[0])/2], (wave.wave_grid[1:]+wave.wave_grid[:-1])/2., [wave.wave_grid[-1]+(wave.wave_grid[-1]-wave.wave_grid[-2])/2]])
+        wave_widths = wave_edges[1:] - wave_edges[:-1]
+        z_line = ((line_preds*wave.wave_grid[None,:]*wave_widths[None,:]).sum(axis=1)/(line_preds*wave_widths[None,:]).sum(axis=1))/1215.67 - 1
 
     return c_line, z_line
 
