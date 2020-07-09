@@ -130,7 +130,7 @@ def line_preds_to_properties(line_preds,line,wave=None, model_type='boxes'):
         wave_widths = wave_edges[1:] - wave_edges[:-1]
         z_line = ((line_preds*wave.wave_grid[None,:]*wave_widths[None,:]).sum(axis=1)/(line_preds*wave_widths[None,:]).sum(axis=1))/l - 1
         """
-        
+
         #######################################################################
         ### JAF: Alternatively, we can curve fit the pseudo-pdf.
         #######################################################################
@@ -151,9 +151,11 @@ def line_preds_to_properties(line_preds,line,wave=None, model_type='boxes'):
         p0 = i_to_wave(j)/l-1
 
         wave_line = np.zeros(c_line.shape)
-        for i in range(len(z_line)):
+        for i in range(len(wave_line)):
             coeff, var_matrix = curve_fit(gaussian_pseudo_pdf, wave.wave_grid, box_line[i,:].flatten(), p0=p0[i])
             test_estimates += [coeff]
+            print('INFO: Finding redshifts; fitted {:3.1%} of predictions...'.format((i+1)/len(z_line)))
+        print(' ')
 
         z_line = wave_line/l - 1
 
