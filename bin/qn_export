@@ -67,6 +67,9 @@ parser.add_argument('--mode', type = str, required=False, default='BOSS',
 parser.add_argument('--model-type', type = str, required=False, default='boxes',
                     choices=['boxes','noboxes'])
 
+parser.add_argument('--nspec', type = int, required=False,
+                    default = None)
+
 args=parser.parse_args()
 
 if args.make_DRQ and args.spall is None:
@@ -76,7 +79,7 @@ tid_field = get_tid_field(args.mode)
 spid_fields = get_spectrum_id_fields(args.mode)
 
 ## Get the testing data.
-tids,X,spid0,spid1,spid2 = read_data(args.data, return_spid=True)
+tids,X,spid0,spid1,spid2 = read_data(args.data, return_spid=True, nspec=args.nspec)
 
 ## Get the training data.
 tids_train,X_train,spid0_train,spid1_train,spid2_train = read_data(args.data_training, return_spid=True)

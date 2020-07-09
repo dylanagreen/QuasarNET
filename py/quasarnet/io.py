@@ -911,7 +911,7 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, verbose=
         h = fitsio.FITS(f)
         w = np.ones(h[1].get_nrows()).astype(bool)
         if nspec is not None:
-            w[nspec:] = False
+            w[nspec:] &= False
         aux_tids = h[1]['TARGETID'][:].astype(int)
         if verbose:
             print("INFO: found {} spectra in file {}".format(aux_tids.shape[0], f))
@@ -921,9 +921,9 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, verbose=
         if verbose:
             print("INFO: removing {} spectra with thing_id=-1".format((~w_goodtid).sum()),flush=True)
         w &= (w_goodtid)
-        print(len(w),w.sum())
         aux_tids = aux_tids[w]
-        aux_X = h[0][w,:]
+        aux_X = h[0][:,:]
+        aux_X = aux_X[w,:]
 
         if truth is not None:
             w_in_truth = np.in1d(aux_tids, list(truth.keys()))
