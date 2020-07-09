@@ -152,7 +152,7 @@ def line_preds_to_properties(line_preds,line,wave=None, model_type='boxes'):
 
         wave_line = np.zeros(c_line.shape)
         for i in range(len(wave_line)):
-            coeff, var_matrix = curve_fit(gaussian_pseudo_pdf, wave.wave_grid, box_line[i,:].flatten(), p0=p0[i])
+            coeff, var_matrix = curve_fit(gaussian_pseudo_pdf, wave.wave_grid, line_preds[i,:].flatten(), p0=p0[i])
             test_estimates += [coeff]
             print('INFO: Finding redshifts; fitted {:3.1%} of predictions...'.format((i+1)/len(z_line)))
         print(' ')
