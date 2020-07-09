@@ -370,7 +370,7 @@ def read_single_exposure(fin, fibers, verbose=False, best_exp=True, random_exp=F
 
             if spcframe_pairs_found<nspcframe_pairs:
                 print('WARN: only {} spcframe pairs found for expid {} in {}, moving to next exp...'.format(spcframe_pairs_found,fin,expid))
-            
+
             # If so, add exposures to the list of infiles.
             if spcframe_pairs_found==nspcframe_pairs:
                 for s in spectros:
@@ -909,19 +909,19 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, verbose=
         if verbose:
             print('INFO: reading data from {}'.format(f))
         h = fitsio.FITS(f)
-        if nspec is None:
-            nspec = h[1].get_nrows()
-        aux_tids = h[1]['TARGETID'][:nspec].astype(int)
+        w = np.ones(h[1].get_nrows()).astype(bool)
+        if nspec is not None:
+            w[nspec:] = False
+        aux_tids = h[1]['TARGETID'].astype(int)
         if verbose:
             print("INFO: found {} spectra in file {}".format(aux_tids.shape[0], f))
 
         ## remove thing_id == -1 or not in sdrq
-        w = (aux_tids != -1)
+        w &= (aux_tids != -1)
         if verbose:
             print("INFO: removing {} spectra with thing_id=-1".format((~w).sum()),flush=True)
         aux_tids = aux_tids[w]
-        aux_X = h[0][:nspec,:]
-        aux_X = aux_X[w,:]
+        aux_X = h[0][w,:]
 
         if truth is not None:
             w_in_truth = np.in1d(aux_tids, list(truth.keys()))
