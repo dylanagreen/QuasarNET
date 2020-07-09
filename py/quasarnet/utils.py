@@ -120,6 +120,7 @@ def line_preds_to_properties(line_preds,line,wave=None, model_type='boxes'):
         ### no bias).
         #######################################################################
 
+        """
         # For the moment, use the same method of determining confidence.
         l = absorber_IGM[line]
         c_line = line_preds.max(axis=1)
@@ -128,6 +129,33 @@ def line_preds_to_properties(line_preds,line,wave=None, model_type='boxes'):
         wave_edges = np.concatenate([[wave.wave_grid[0]-(wave.wave_grid[1]-wave.wave_grid[0])/2], (wave.wave_grid[1:]+wave.wave_grid[:-1])/2., [wave.wave_grid[-1]+(wave.wave_grid[-1]-wave.wave_grid[-2])/2]])
         wave_widths = wave_edges[1:] - wave_edges[:-1]
         z_line = ((line_preds*wave.wave_grid[None,:]*wave_widths[None,:]).sum(axis=1)/(line_preds*wave_widths[None,:]).sum(axis=1))/l - 1
+        """
+        
+        #######################################################################
+        ### JAF: Alternatively, we can curve fit the pseudo-pdf.
+        #######################################################################
+
+        from scipy.optimize import curve_fit
+
+        # For the moment, use the same method of determining confidence.
+        l = absorber_IGM[line]
+        c_line = line_preds.max(axis=1)
+
+        line_width = 50.
+        def gaussian_pseudo_pdf(x, *p):
+            mu = np.array(p)
+            g = np.exp(-(x-mu[:,None])**2/(line_width**2))
+            return g.flatten()
+
+        j = line_preds.argmax(axis=1)
+        p0 = i_to_wave(j)/l-1
+
+        wave_line = np.zeros(c_line.shape)
+        for i in range(len(z_line)):
+            coeff, var_matrix = curve_fit(gaussian_pseudo_pdf, wave.wave_grid, box_line[i,:].flatten(), p0=p0[i])
+            test_estimates += [coeff]
+
+        z_line = wave_line/l - 1
 
     return c_line, z_line
 
