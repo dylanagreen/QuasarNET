@@ -917,9 +917,11 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, verbose=
             print("INFO: found {} spectra in file {}".format(aux_tids.shape[0], f))
 
         ## remove thing_id == -1 or not in sdrq
-        w &= (aux_tids != -1)
+        w_badtid = (aux_tids != -1)
         if verbose:
-            print("INFO: removing {} spectra with thing_id=-1".format((~w).sum()),flush=True)
+            print("INFO: removing {} spectra with thing_id=-1".format((~w_badtid).sum()),flush=True)
+        w &= (~w_badtid)
+        print(len(w),w.sum())
         aux_tids = aux_tids[w]
         aux_X = h[0][w,:]
 
