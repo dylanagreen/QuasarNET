@@ -912,7 +912,7 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, verbose=
         w = np.ones(h[1].get_nrows()).astype(bool)
         if nspec is not None:
             w[nspec:] = False
-        aux_tids = h[1]['TARGETID'].astype(int)
+        aux_tids = h[1]['TARGETID'][:].astype(int)
         if verbose:
             print("INFO: found {} spectra in file {}".format(aux_tids.shape[0], f))
 
