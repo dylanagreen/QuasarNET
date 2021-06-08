@@ -40,13 +40,15 @@ parser.add_argument("--amsgrad", action='store_true',
         default=False, required=False)
 parser.add_argument("--no-shuffle", action='store_true',
         default=False, required=False)
+parser.add_argument('--seed', type = int, required=False,
+        default = 2019)
 
 args = parser.parse_args()
 
 # This code block attempts to make the results of this training file
 # deterministic, at least as far as we can.
 import tensorflow as tf
-tf.random.set_seed(123) # Sets global random seed
+tf.random.set_seed(args.seed) # Sets global random seed
 os.environ["TF_DETERMINISTIC_OPS"] = '1' # Makes CUDA attempt to use deterministic algos
 
 ## Load the training data and the truth table.
