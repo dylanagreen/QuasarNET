@@ -8,130 +8,113 @@ import fitsio
 from quasarnet.models import QuasarNET, custom_loss
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import ModelCheckpoint
+import tensorflow as tf
 from quasarnet import io
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("-t","--truth", type = str, required=False,nargs="*")
-parser.add_argument("-d","--data", type = str, required=True,nargs="*")
-parser.add_argument("-v","--validation", type = str, required=False,nargs="*")
-parser.add_argument("-e","--epochs", type = int,
-        required=False, default = 5)
-parser.add_argument("--boxes", type = int,
-        required=False, default = 13)
-parser.add_argument("-o","--out-prefix", type = str, required=True)
-parser.add_argument("-l","--lines", type = str,
-        required=False, default = ["LYA"], nargs="*")
-parser.add_argument("-b","--lines-bal", type = str,
-        required=False, default = ["CIV(1548)"], nargs="*")
-parser.add_argument("--decay", type = float, required=False,
-        default = 0.)
+parser.add_argument("-t", "--truth", type=str, required=False, nargs="*")
+parser.add_argument("-d", "--data", type=str, required=True, nargs="*")
+parser.add_argument("-v", "--validation", type=str, required=False, nargs="*")
+parser.add_argument("-e", "--epochs", type=int, required=False, default=5)
+parser.add_argument("--boxes", type=int, required=False, default=13)
+parser.add_argument("-o", "--out-prefix", type=str, required=True)
+parser.add_argument("-l", "--lines", type=str, required=False,
+                    default=["LYA"], nargs="*")
+parser.add_argument("-b", "--lines-bal", type=str, required=False,
+                    default=["CIV(1548)"], nargs="*")
+parser.add_argument("--decay", type=float, required=False, default=0.)
 parser.add_argument("--save-epoch-checkpoints", action='store_true',
-        default=False, required=False)
-parser.add_argument('--lmin', type = float, required=False,
-        default = 3600.)
-parser.add_argument('--lmax', type = float, required=False,
-        default = 10000.)
-parser.add_argument('--dll', type = float, required=False,
-        default = 1.e-3)
-parser.add_argument("--offset-activation-function", type = str,
-        choices = ['sigmoid','rescaled_sigmoid','linear'],
-        default='rescaled_sigmoid', required=False)
-parser.add_argument("--amsgrad", action='store_true',
-        default=False, required=False)
-parser.add_argument("--no-shuffle", action='store_true',
-        default=False, required=False)
-parser.add_argument('--seed', type = int, required=False,
-        default = 2019)
+                    default=False, required=False)
+parser.add_argument('--lmin', type=float, required=False, default=3600.)
+parser.add_argument('--lmax', type=float, required=False, default=10000.)
+parser.add_argument('--dll', type=float, required=False, default=1.e-3)
+parser.add_argument("--offset-activation-function", type=str,
+                    choices=['sigmoid', 'rescaled_sigmoid', 'linear'],
+                    default='rescaled_sigmoid', required=False)
+parser.add_argument("--amsgrad", action='store_true', default=False,
+                    required=False)
+parser.add_argument("--no-shuffle", action='store_true', default=False,
+                    required=False)
+parser.add_argument('--seed', type=int, required=False, default=2019)
 
 args = parser.parse_args()
 
 # This code block attempts to make the results of this training file
-# deterministic, at least as far as we can.
-import tensorflow as tf
-tf.random.set_seed(args.seed) # Sets global random seed
-os.environ["TF_DETERMINISTIC_OPS"] = '1' # Makes CUDA attempt to use deterministic algos
+# deterministic, at least as far as we can. We set seed then we
+# make CUDA attempt to use deterministic algorithms
+tf.random.set_seed(args.seed)
+os.environ["TF_DETERMINISTIC_OPS"] = '1'
 
-## Load the training data and the truth table.
+# Load the training data and the truth table.
 truth = io.read_truth(args.truth)
-tids,X,Y,z,bal = io.read_data(args.data,truth)
+tids, X, Y, z, bal = io.read_data(args.data, truth)
 
-## Set up the model.
-model = QuasarNET(
-        input_shape=X[0,:,None].shape,
-        boxes=args.boxes,
-        nlines=len(args.lines)+len(args.lines_bal),
-        offset_activation_function=args.offset_activation_function)
+# Set up the model.
+model = QuasarNET(input_shape=X[0, :, None].shape,
+                  boxes=args.boxes,
+                  nlines=len(args.lines) + len(args.lines_bal),
+                  offset_activation_function=args.offset_activation_function)
 
-## Construct the loss function for each line.
+# Construct the loss function for each line.
 loss = []
 for i in args.lines:
     loss.append(custom_loss)
 for i in args.lines_bal:
     loss.append(custom_loss)
 
-## Set up the minimisation procedure.
-adam = Adam(decay=args.decay,amsgrad=args.amsgrad)
+# Set up the minimisation procedure.
+adam = Adam(decay=args.decay, amsgrad=args.amsgrad)
 model.compile(optimizer=adam, loss=loss, metrics=[])
 
-## Construct the objective for the training data.
-box, sample_weight = io.objective(z,Y,bal,lines=args.lines,
-        lines_bal=args.lines_bal,nboxes=args.boxes,llmin=np.log10(args.lmin),
-        llmax=np.log10(args.lmax),dll=args.dll)
+# Construct the objective for the training data.
+box, sample_weight = io.objective(z, Y, bal, lines=args.lines,
+                                  lines_bal=args.lines_bal, nboxes=args.boxes,
+                                  llmin=np.log10(args.lmin),
+                                  llmax=np.log10(args.lmax), dll=args.dll)
 
-## Set a checkpoint to save the model at epochs with lowest loss.
-best_model_callback = ModelCheckpoint(
-    filepath=args.out_prefix+"-best.h5",
-    save_weights_only=False,
-    monitor='loss',
-    mode='min',
-    save_best_only=True)
+# Set a checkpoint to save the model at epochs with lowest loss.
+best_model_callback = ModelCheckpoint(filepath=args.out_prefix+"-best.h5",
+                                      save_weights_only=False, monitor='loss',
+                                      mode='min', save_best_only=True)
 callbacks_list = [best_model_callback]
 
-## If desired, make checkpoint at each epoch.
+# If desired, make checkpoint at each epoch.
 if args.save_epoch_checkpoints:
-    filepath = args.out_prefix+"-epoch{epoch:03d}.h5"
-    checkpoint = ModelCheckpoint(filepath,verbose=1)
+    filepath = args.out_prefix + "-epoch{epoch:03d}.h5"
+    checkpoint = ModelCheckpoint(filepath, verbose=1)
     callbacks_list += [checkpoint]
 
-## Fit the model using specified hyper-parameters.
+# Fit the model using specified hyper-parameters.
 if args.validation:
-    tids_v,X_v,Y_v,z_v,bal_v = io.read_data(args.validation,truth)
+    tids_v, X_v, Y_v, z_v, bal_v = io.read_data(args.validation, truth)
 
     # Generate objective for validation data
-    box_v, _ = io.objective(z_v[0:X.shape[0]],Y_v[0:X.shape[0]],bal_v[0:X.shape[0]],lines=args.lines,
-        lines_bal=args.lines_bal,nboxes=args.boxes,llmin=np.log10(args.lmin),
-        llmax=np.log10(args.lmax),dll=args.dll)
+    box_v, _ = io.objective(z_v[0:X.shape[0]], Y_v[0:X.shape[0]],
+                            bal_v[0:X.shape[0]], lines=args.lines,
+                            lines_bal=args.lines_bal, nboxes=args.boxes,
+                            llmin=np.log10(args.lmin),
+                            llmax=np.log10(args.lmax), dll=args.dll)
 
     print("Starting fit with validation data")
     # Fit with the given validation data
-    history = model.fit(X[:,:,None], box,
-        epochs = args.epochs,
-        batch_size = 256,
-        sample_weight = sample_weight,
-        callbacks = callbacks_list,
-        shuffle = not args.no_shuffle,
-        validation_data = (X_v[0:X.shape[0], :, None], box_v),
-    )
+    history = model.fit(X[:, :, None], box, epochs=args.epochs,
+                        batch_size=256, sample_weight=sample_weight,
+                        callbacks=callbacks_list, shuffle=not args.no_shuffle,
+                        validation_data=(X_v[0:X.shape[0], :, None], box_v))
 else:
     print("Starting fit.")
-    history = model.fit(X[:,:,None], box,
-            epochs = args.epochs,
-            batch_size = 256,
-            sample_weight = sample_weight,
-            callbacks = callbacks_list,
-            shuffle = not args.no_shuffle,
-            #validation_split = 0.2,
-            #use_multiprocessing = True,
-            )
+    history = model.fit(X[:, :, None], box, epochs=args.epochs, batch_size=256,
+                        sample_weight=sample_weight, callbacks=callbacks_list,
+                        shuffle=not args.no_shuffle)
 
-## Save the fitted model and printa a summary.
+# Save the fitted model and printa a summary.
 model.save(args.out_prefix+".h5")
 model.summary()
 
-## Write a hist fits file?
+# Write a hist fits file?
 cols = []
-fout = fitsio.FITS(args.out_prefix+"_hist.fits",'rw',clobber=True)
+fout = fitsio.FITS(args.out_prefix+"_hist.fits", 'rw', clobber=True)
 for v in history.history.values():
     cols.append(np.array(v))
 fout.write(cols, names=list(history.history.keys()))
