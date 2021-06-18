@@ -89,19 +89,24 @@ if args.save_epoch_checkpoints:
 if args.validation:
     tids_v, X_v, Y_v, z_v, bal_v = io.read_data(args.validation, truth)
 
+    l_val = X.shape[0] // 2
+
     # Generate objective for validation data
-    box_v, _ = io.objective(z_v[0:X.shape[0]], Y_v[0:X.shape[0]],
-                            bal_v[0:X.shape[0]], lines=args.lines,
+    box_v, _ = io.objective(z_v[:l_val], Y_v[:l_val],
+                            bal_v[:l_val], lines=args.lines,
                             lines_bal=args.lines_bal, nboxes=args.boxes,
                             llmin=np.log10(args.lmin),
                             llmax=np.log10(args.lmax), dll=args.dll)
 
     print("Starting fit with validation data")
+    print(f"{l_val} validation/test samples.")
+    print(f"{len(z)} training samples.")
+
     # Fit with the given validation data
     history = model.fit(X[:, :, None], box, epochs=args.epochs,
                         batch_size=256, sample_weight=sample_weight,
                         callbacks=callbacks_list, shuffle=not args.no_shuffle,
-                        validation_data=(X_v[0:X.shape[0], :, None], box_v))
+                        validation_data=(X_v[: l_val, :, None], box_v))
 else:
     print("Starting fit.")
     history = model.fit(X[:, :, None], box, epochs=args.epochs, batch_size=256,
