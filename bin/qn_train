@@ -41,6 +41,8 @@ parser.add_argument('--seed', type=int, required=False, default=2019)
 
 args = parser.parse_args()
 
+#l_train = 62023 * 2
+
 # This code block attempts to make the results of this training file
 # deterministic, at least as far as we can. We set seed then we
 # make CUDA attempt to use deterministic algorithms
@@ -50,6 +52,10 @@ os.environ["TF_DETERMINISTIC_OPS"] = '1'
 # Load the training data and the truth table.
 truth = io.read_truth(args.truth)
 tids, X, Y, z, bal = io.read_data(args.data, truth)
+#X = X[0:l_train, :]
+#Y = Y[0:l_train, : ]
+#z = z[0:l_train]
+#bal = bal[0:l_train]
 
 # Set up the model.
 model = QuasarNET(input_shape=X[0, :, None].shape,
@@ -85,6 +91,10 @@ best_val_callback = ModelCheckpoint(filepath=args.out_prefix+"-val-best.h5",
 
 callbacks_list = [best_model_callback, best_val_callback]
 
+# Setting these up before to ensure they exist.
+t_l = []
+v_l = []
+
 # If desired, make checkpoint at each epoch.
 if args.save_epoch_checkpoints:
     filepath = args.out_prefix + "-epoch{epoch:03d}.h5"
@@ -107,6 +117,11 @@ if args.validation:
     print("Starting fit with validation data")
     print(f"{l_val} validation/test samples.")
     print(f"{len(z)} training samples.")
+
+    t_l = model.evaluate(X[:, :, None], box, verbose=2)
+    v_l = model.evaluate(X_v[:l_val, :, None], box_v, verbose=2)
+    print(f"Pre training loss: {t_l}")
+    print(f"Pre validation loss: {v_l}")
 
     # Fit with the given validation data
     history = model.fit(X[:, :, None], box, epochs=args.epochs,
@@ -154,6 +169,12 @@ else:
     print("Starting fit with validation split")
     print(f"{len(box_test[0])} validation/test samples.")
     print(f"{len(box_train[0])} training samples.")
+
+    t_l = model.evaluate(X[:, :, None], box, verbose=2)
+    v_l = model.evaluate(X_v[:l_val, :, None], box_v, verbose=2)
+    print(f"Pre training loss: {t_l}")
+    print(f"Pre validation loss: {v_l}")
+
     # Fit with the given validation data
     history = model.fit(X_train[:, :, None], box_train, epochs=args.epochs,
                         batch_size=256, sample_weight=sw_train,
@@ -166,8 +187,11 @@ model.summary()
 
 # Write a hist fits file?
 cols = []
+pre_loss = np.concatenate((t_l, v_l))
+
 fout = fitsio.FITS(args.out_prefix+"_hist.fits", 'rw', clobber=True)
-for v in history.history.values():
+for i, v in enumerate(history.history.values()):
+    v.insert(0, pre_loss[i])
     cols.append(np.array(v))
 fout.write(cols, names=list(history.history.keys()))
 fout.close()
