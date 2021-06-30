@@ -3,6 +3,7 @@ import argparse
 import os
 
 import numpy as np
+from numpy.random import default_rng
 import fitsio
 
 from quasarnet.models import QuasarNET, custom_loss
@@ -106,14 +107,55 @@ if args.validation:
     history = model.fit(X[:, :, None], box, epochs=args.epochs,
                         batch_size=256, sample_weight=sample_weight,
                         callbacks=callbacks_list, shuffle=not args.no_shuffle,
-                        validation_data=(X_v[: l_val, :, None], box_v))
+                        validation_data=(X_v[:l_val, :, None], box_v))
 else:
-    print("Starting fit.")
-    history = model.fit(X[:, :, None], box, epochs=args.epochs, batch_size=256,
-                        sample_weight=sample_weight, callbacks=callbacks_list,
-                        shuffle=not args.no_shuffle)
+    print("Starting fit. Splitting training into train/val.")
 
-# Save the fitted model and printa a summary.
+    # Shuffle indicies 0 through len(X) to
+    # shuffle the whole dataset with np indices.
+    rng = default_rng(args.seed)
+    ind = np.arange(X.shape[0])
+    rng.shuffle(ind)
+
+    # Shuffles the dataset using the shuffled indices
+    X = X[ind, :]
+    box = np.asarray(box)[:, ind, :]
+    sw = np.asarray(sample_weight)[:, ind]
+
+    # Split the dataset as according
+    l_train = X.shape[0] // 9
+    X_train = X[:l_train, :]
+    sw_train = []
+    box_train = []
+
+    # Need to put these into a list hence this loop
+    for i in range(7):
+        box_train.append(box[i, :l_train, :])
+        sw_train.append(sw[i, :l_train])
+
+    X_test = X[l_train:, :]
+    sw_test = []
+    box_test = []
+
+    for i in range(7):
+        box_test.append(box[i, l_train:, :])
+        sw_test.append(sw[i, l_train:])
+
+#    history = model.fit(X[:, :, None], box, epochs=args.epochs, batch_size=256,
+#                        sample_weight=sample_weight, callbacks=callbacks_list,
+#                        validation_split=8/9,
+#                        shuffle=not args.no_shuffle)
+
+    print("Starting fit with validation split")
+    print(f"{len(box_test[0])} validation/test samples.")
+    print(f"{len(box_train[0])} training samples.")
+    # Fit with the given validation data
+    history = model.fit(X_train[:, :, None], box_train, epochs=args.epochs,
+                        batch_size=256, sample_weight=sw_train,
+                        callbacks=callbacks_list, shuffle=not args.no_shuffle,
+                        validation_data=(X_test[:, :, None], box_test, sw_test))
+
+# Save the fitted model and print a summary.
 model.save(args.out_prefix+".h5")
 model.summary()
 
