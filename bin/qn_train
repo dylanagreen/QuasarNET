@@ -78,7 +78,12 @@ box, sample_weight = io.objective(z, Y, bal, lines=args.lines,
 best_model_callback = ModelCheckpoint(filepath=args.out_prefix+"-best.h5",
                                       save_weights_only=False, monitor='loss',
                                       mode='min', save_best_only=True)
-callbacks_list = [best_model_callback]
+
+best_val_callback = ModelCheckpoint(filepath=args.out_prefix+"-val-best.h5",
+                                    save_weights_only=False, monitor='val_loss',
+                                    mode='min', save_best_only=True)
+
+callbacks_list = [best_model_callback, best_val_callback]
 
 # If desired, make checkpoint at each epoch.
 if args.save_epoch_checkpoints:
