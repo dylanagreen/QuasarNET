@@ -172,7 +172,7 @@ else:
     print(f"{len(box_train[0])} training samples.")
 
     t_l = model.evaluate(X[:, :, None], box, verbose=2)
-    v_l = model.evaluate(X_v[:l_val, :, None], box_v, verbose=2)
+    v_l = model.evaluate(X_test[:, :, None], box_test, verbose=2)
     print(f"Pre training loss: {t_l}")
     print(f"Pre validation loss: {v_l}")
 
