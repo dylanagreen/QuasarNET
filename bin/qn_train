@@ -127,7 +127,8 @@ if args.validation:
     history = model.fit(X[:, :, None], box, epochs=args.epochs,
                         batch_size=256, sample_weight=sample_weight,
                         callbacks=callbacks_list, shuffle=not args.no_shuffle,
-                        validation_data=(X_v[:l_val, :, None], box_v))
+                        validation_data=(X_v[:l_val, :, None], box_v),
+                        verbose=2)
 else:
     print("Starting fit. Splitting training into train/val.")
 
@@ -179,7 +180,8 @@ else:
     history = model.fit(X_train[:, :, None], box_train, epochs=args.epochs,
                         batch_size=256, sample_weight=sw_train,
                         callbacks=callbacks_list, shuffle=not args.no_shuffle,
-                        validation_data=(X_test[:, :, None], box_test, sw_test))
+                        validation_data=(X_test[:, :, None], box_test, sw_test),
+                        verbose=2)
 
 # Save the fitted model and print a summary.
 model.save(args.out_prefix+".h5")
