@@ -3,7 +3,6 @@ import argparse
 import os
 
 import numpy as np
-from numpy.random import default_rng
 import fitsio
 
 from quasarnet.models import QuasarNET, custom_loss
@@ -11,6 +10,9 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import ModelCheckpoint
 import tensorflow as tf
 from quasarnet import io
+
+from sklearn.model_selection import train_test_split
+from numpy.random import default_rng
 
 parser = argparse.ArgumentParser()
 
@@ -105,21 +107,21 @@ if args.save_epoch_checkpoints:
 if args.validation:
     tids_v, X_v, Y_v, z_v, bal_v = io.read_data(args.validation, truth)
 
-    l_val = X.shape[0] // 2
+    l_val = X.shape[0]
 
     # Generate objective for validation data
-    box_v, _ = io.objective(z_v[:l_val], Y_v[:l_val],
+    box_v, sw_v = io.objective(z_v[:l_val], Y_v[:l_val],
                             bal_v[:l_val], lines=args.lines,
                             lines_bal=args.lines_bal, nboxes=args.boxes,
                             llmin=np.log10(args.lmin),
                             llmax=np.log10(args.lmax), dll=args.dll)
 
     print("Starting fit with validation data")
-    print(f"{l_val} validation/test samples.")
+    print(f"{len(z_v[0:l_val])} validation/test samples.")
     print(f"{len(z)} training samples.")
 
-    t_l = model.evaluate(X[:, :, None], box, verbose=2)
-    v_l = model.evaluate(X_v[:l_val, :, None], box_v, verbose=2)
+    t_l = model.evaluate(X[:, :, None], box, sample_weight=sample_weight, verbose=2)
+    v_l = model.evaluate(X_v[:l_val, :, None], box_v, sample_weight=sw_v, verbose=2)
     print(f"Pre training loss: {t_l}")
     print(f"Pre validation loss: {v_l}")
 
@@ -127,8 +129,7 @@ if args.validation:
     history = model.fit(X[:, :, None], box, epochs=args.epochs,
                         batch_size=256, sample_weight=sample_weight,
                         callbacks=callbacks_list, shuffle=not args.no_shuffle,
-                        validation_data=(X_v[:l_val, :, None], box_v),
-                        verbose=2)
+                        validation_data=(X_v[:l_val, :, None], box_v, sw_v), verbose=2)
 else:
     print("Starting fit. Splitting training into train/val.")
 
@@ -144,7 +145,7 @@ else:
     sw = np.asarray(sample_weight)[:, ind]
 
     # Split the dataset as according
-    l_train = X.shape[0] // 9
+    l_train = 2 * X.shape[0] // 9
     X_train = X[:l_train, :]
     sw_train = []
     box_train = []
@@ -162,38 +163,37 @@ else:
         box_test.append(box[i, l_train:, :])
         sw_test.append(sw[i, l_train:])
 
+    t_l = model.evaluate(X_train[:, :, None], box_train, sample_weight=sw_train, verbose=2)
+    v_l = model.evaluate(X_test[:, :, None], box_test, sample_weight=sw_test, verbose=2)
+    print(f"Pre training loss: {t_l}")
+    print(f"Pre validation loss: {v_l}")
+
 #    history = model.fit(X[:, :, None], box, epochs=args.epochs, batch_size=256,
 #                        sample_weight=sample_weight, callbacks=callbacks_list,
 #                        validation_split=8/9,
-#                        shuffle=not args.no_shuffle)
+#                        shuffle=not args.no_shuffle, verbose=2)
 
     print("Starting fit with validation split")
     print(f"{len(box_test[0])} validation/test samples.")
     print(f"{len(box_train[0])} training samples.")
-
-    t_l = model.evaluate(X[:, :, None], box, verbose=2)
-    v_l = model.evaluate(X_test[:, :, None], box_test, verbose=2)
-    print(f"Pre training loss: {t_l}")
-    print(f"Pre validation loss: {v_l}")
-
     # Fit with the given validation data
     history = model.fit(X_train[:, :, None], box_train, epochs=args.epochs,
                         batch_size=256, sample_weight=sw_train,
                         callbacks=callbacks_list, shuffle=not args.no_shuffle,
-                        validation_data=(X_test[:, :, None], box_test, sw_test),
-                        verbose=2)
+                        validation_data=(X_test[:, :, None], box_test, sw_test), verbose=2)
 
-# Save the fitted model and print a summary.
+# Save the fitted model and printa a summary.
 model.save(args.out_prefix+".h5")
 model.summary()
 
 # Write a hist fits file?
 cols = []
-pre_loss = np.concatenate((t_l, v_l))
+pre_loss = np.concatenate((t_l, v_l, t_l))
 
 fout = fitsio.FITS(args.out_prefix+"_hist.fits", 'rw', clobber=True)
 for i, v in enumerate(history.history.values()):
     v.insert(0, pre_loss[i])
     cols.append(np.array(v))
+
 fout.write(cols, names=list(history.history.keys()))
 fout.close()
