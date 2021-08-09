@@ -6,8 +6,9 @@ import numpy as np
 import fitsio
 
 from quasarnet.models import QuasarNET, custom_loss
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam, SGD
 from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.python.keras.utils.layer_utils import count_params
 import tensorflow as tf
 from quasarnet import io
 
@@ -65,6 +66,8 @@ model = QuasarNET(input_shape=X[0, :, None].shape,
                   nlines=len(args.lines) + len(args.lines_bal),
                   offset_activation_function=args.offset_activation_function)
 
+trainable_count = count_params(model.trainable_weights)
+print("Number of Trainable Parameters:", trainable_count)
 # Construct the loss function for each line.
 loss = []
 for i in args.lines:
@@ -73,7 +76,8 @@ for i in args.lines_bal:
     loss.append(custom_loss)
 
 # Set up the minimisation procedure.
-adam = Adam(decay=args.decay, amsgrad=args.amsgrad)
+sgd = SGD(learning_rate=.1, momentum=0.9)
+adam = Adam(learning_rate=0.001, decay=args.decay, amsgrad=args.amsgrad)
 model.compile(optimizer=adam, loss=loss, metrics=[])
 
 # Construct the objective for the training data.
@@ -88,12 +92,11 @@ best_model_callback = ModelCheckpoint(filepath=args.out_prefix+"-best.h5",
                                       mode='min', save_best_only=True)
 
 best_val_callback = ModelCheckpoint(filepath=args.out_prefix+"-val-best.h5",
-                                    save_weights_only=False, monitor='val_loss',
-                                    mode='min', save_best_only=True)
+                                      save_weights_only=False, monitor='val_loss',
+                                      mode='min', save_best_only=True)
 
 callbacks_list = [best_model_callback, best_val_callback]
 
-# Setting these up before to ensure they exist.
 t_l = []
 v_l = []
 
