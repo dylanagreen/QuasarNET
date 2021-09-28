@@ -1,0 +1,230 @@
+#!/usr/bin/env python
+import argparse
+import os
+
+import numpy as np
+from numpy.random import default_rng
+import fitsio
+
+from quasarnet.models import QuasarNET, custom_loss
+from tensorflow.keras.optimizers import Adam, SGD
+from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.python.keras.utils.layer_utils import count_params
+import tensorflow as tf
+
+from quasarnet import io
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument("-t", "--truth", type=str, required=False, nargs="*")
+parser.add_argument("-d", "--data", type=str, required=True, nargs="*")
+parser.add_argument("-v", "--validation", type=str, required=False, nargs="*")
+
+parser.add_argument("-dt", "--desitruth", type=str, required=False, nargs="*")
+parser.add_argument("-dd", "--desidata", type=str, required=True, nargs="*")
+parser.add_argument("-dv", "--desivalidation", type=str, required=False, nargs="*")
+
+parser.add_argument("-e", "--epochs", type=int, required=False, default=5)
+parser.add_argument("--boxes", type=int, required=False, default=13)
+parser.add_argument("-o", "--out-prefix", type=str, required=True)
+parser.add_argument("-l", "--lines", type=str, required=False,
+                    default=["LYA"], nargs="*")
+parser.add_argument("-b", "--lines-bal", type=str, required=False,
+                    default=["CIV(1548)"], nargs="*")
+parser.add_argument("--decay", type=float, required=False, default=0.)
+parser.add_argument("--save-epoch-checkpoints", action='store_true',
+                    default=False, required=False)
+parser.add_argument('--lmin', type=float, required=False, default=3600.)
+parser.add_argument('--lmax', type=float, required=False, default=10000.)
+parser.add_argument('--dll', type=float, required=False, default=1.e-3)
+parser.add_argument("--offset-activation-function", type=str,
+                    choices=['sigmoid', 'rescaled_sigmoid', 'linear'],
+                    default='rescaled_sigmoid', required=False)
+parser.add_argument("--amsgrad", action='store_true', default=False,
+                    required=False)
+parser.add_argument("--no-shuffle", action='store_true', default=False,
+                    required=False)
+parser.add_argument('--seed', type=int, required=False, default=2019)
+
+args = parser.parse_args()
+
+#l_train = 62023 * 2
+
+# This code block attempts to make the results of this training file
+# deterministic, at least as far as we can. We set seed then we
+# make CUDA attempt to use deterministic algorithms
+tf.random.set_seed(args.seed)
+os.environ["TF_DETERMINISTIC_OPS"] = '1'
+
+# Load the training data and the truth table.
+truth = io.read_truth(args.truth)
+_, X, Y, z, bal = io.read_data(args.data, truth)
+
+_, X_d, Y_d, z_d, bal_d = io.read_data_desi(args.desidata[0], args.desitruth[0])
+
+print(f"{len(z)} BOSS DR12 training samples.")
+print(f"{len(z_d)} DESI BLANC training samples.")
+
+l_boss = X.shape[0]
+l_desi = X_d.shape[0]
+
+#X = X[0:l_train, :]
+#Y = Y[0:l_train, : ]
+#z = z[0:l_train]
+#bal = bal[0:l_train]
+
+X = np.concatenate([X[:l_desi, :], X_d], axis=0)
+Y = np.concatenate([Y[:l_desi, :], Y_d], axis=0)
+z = np.concatenate([z[:l_desi], z_d], axis=0)
+bal = np.concatenate([bal[:l_desi], bal_d], axis=0)
+
+print(f"{len(z)} total training samples.")
+
+# Set up the model.
+model = QuasarNET(input_shape=X[0, :, None].shape,
+                  boxes=args.boxes,
+                  nlines=len(args.lines) + len(args.lines_bal),
+                  offset_activation_function=args.offset_activation_function)
+                  
+trainable_count = count_params(model.trainable_weights)
+print("Number of Trainable Parameters:", trainable_count)
+# Construct the loss function for each line.
+loss = []
+for i in args.lines:
+    loss.append(custom_loss)
+for i in args.lines_bal:
+    loss.append(custom_loss)
+
+# Set up the minimisation procedure.
+sgd = SGD(learning_rate=.01)#, momentum=0.9)
+adam = Adam(learning_rate=0.001*5, decay=args.decay, amsgrad=args.amsgrad)
+model.compile(optimizer=adam, loss=loss, metrics=[])
+
+# Construct the objective for the training data.
+box, sample_weight = io.objective(z, Y, bal, lines=args.lines,
+                                  lines_bal=args.lines_bal, nboxes=args.boxes,
+                                  llmin=np.log10(args.lmin),
+                                  llmax=np.log10(args.lmax), dll=args.dll)
+
+# Set a checkpoint to save the model at epochs with lowest loss.
+best_model_callback = ModelCheckpoint(filepath=args.out_prefix+"-best.h5",
+                                      save_weights_only=False, monitor='loss',
+                                      mode='min', save_best_only=True)
+                                      
+best_val_callback = ModelCheckpoint(filepath=args.out_prefix+"-val-best.h5",
+                                      save_weights_only=False, monitor='val_loss',
+                                      mode='min', save_best_only=True)
+                                      
+callbacks_list = [best_model_callback, best_val_callback]
+
+t_l = []
+v_l = []
+
+# If desired, make checkpoint at each epoch.
+if args.save_epoch_checkpoints:
+    filepath = args.out_prefix + "-epoch{epoch:03d}.h5"
+    checkpoint = ModelCheckpoint(filepath, verbose=1)
+    callbacks_list += [checkpoint]
+
+# Fit the model using specified hyper-parameters.
+if args.validation:
+    _, X_v, Y_v, z_v, bal_v = io.read_data(args.validation, truth)
+    
+    _, X_dv, Y_dv, z_dv, bal_dv = io.read_data_desi(args.desivalidation[0], args.desitruth[0])
+        
+    print(f"{len(z_v[:l_boss])} BOSS DR12 validation/test samples.")
+    print(f"{len(z_v[:l_desi])} DESI BLANC validation/test samples.")
+
+    X_v = np.concatenate([X_v[:l_desi, :], X_dv[:l_desi, :]])
+    Y_v = np.concatenate([Y_v[:l_desi, :], Y_dv[:l_desi, :]])
+    z_v = np.concatenate([z_v[:l_desi], z_dv[:l_desi]])
+    bal_v = np.concatenate([bal_v[:l_desi], bal_dv[:l_desi]])
+    
+    # Generate objective for validation data
+    box_v, sw_v = io.objective(z_v, Y_v, bal_v, lines=args.lines,
+                            lines_bal=args.lines_bal, nboxes=args.boxes,
+                            llmin=np.log10(args.lmin),
+                            llmax=np.log10(args.lmax), dll=args.dll)
+
+    print(f"{len(z_v)} total validation/test samples.")
+    
+    print("Starting fit with validation data")
+    
+    t_l = model.evaluate(X[:, :, None], box, sample_weight=sample_weight, verbose=2)
+    v_l = model.evaluate(X_v[:, :, None], box_v, sample_weight=sw_v, verbose=2)
+    print(f"Pre training loss: {t_l}")
+    print(f"Pre validation loss: {v_l}")
+
+    # Fit with the given validation data
+    history = model.fit(X[:, :, None], box, epochs=args.epochs,
+                        batch_size=256, sample_weight=sample_weight,
+                        callbacks=callbacks_list, shuffle=not args.no_shuffle,
+                        validation_data=(X_v[:, :, None], box_v, sw_v), verbose=2)
+else:
+    print("Starting fit. Splitting training into train/val.")
+    
+    # Shuffle indicies 0 through len(X) to
+    # shuffle the whole dataset with np indices.
+    rng = default_rng(args.seed * 2)
+    ind = np.arange(X.shape[0])
+    rng.shuffle(ind)
+    
+    # Shuffles the dataset using the shuffled indices
+    X = X[ind, :]
+    box = np.asarray(box)[:, ind, :]
+    sw = np.asarray(sample_weight)[:, ind]
+
+    # Split the dataset as according
+    l_train = 1 * X.shape[0] // 9
+    X_train = X[:l_train, :]
+    sw_train = []
+    box_train = []
+    
+    # Need to put these into a list hence this loop
+    for i in range(7):
+        box_train.append(box[i, :l_train, :])
+        sw_train.append(sw[i, :l_train])
+    
+    l_train = 2 * l_train  # To ensure same validation dataset
+    X_test = X[l_train:, :]
+    sw_test = []
+    box_test = []
+    
+    for i in range(7):
+        box_test.append(box[i, l_train:, :])
+        sw_test.append(sw[i, l_train:])
+        
+    t_l = model.evaluate(X_train[:, :, None], box_train, sample_weight=sw_train, verbose=2, batch_size=256)
+    v_l = model.evaluate(X_test[:, :, None], box_test, sample_weight=sw_test, verbose=2, batch_size=256)
+    print(f"Pre training loss: {t_l}")
+    print(f"Pre validation loss: {v_l}")
+
+#    history = model.fit(X[:, :, None], box, epochs=args.epochs, batch_size=256,
+#                        sample_weight=sample_weight, callbacks=callbacks_list,
+#                        validation_split=8/9,
+#                        shuffle=not args.no_shuffle, verbose=2)
+
+    print("Starting fit with validation split")
+    print(f"{len(box_test[0])} validation/test samples.")
+    print(f"{len(box_train[0])} training samples.")
+    # Fit with the given validation data
+    history = model.fit(X_train[:, :, None], box_train, epochs=args.epochs,
+                        batch_size=256, sample_weight=sw_train,
+                        callbacks=callbacks_list, shuffle=not args.no_shuffle,
+                        validation_data=(X_test[:, :, None], box_test, sw_test), verbose=2)
+
+# Save the fitted model and printa a summary.
+model.save(args.out_prefix+".h5")
+model.summary()
+
+# Write a hist fits file?
+cols = []
+pre_loss = np.concatenate((t_l, v_l, t_l))
+
+fout = fitsio.FITS(args.out_prefix+"_hist.fits", 'rw', clobber=True)
+for i, v in enumerate(history.history.values()):
+    v.insert(0, pre_loss[i])
+    cols.append(np.array(v))
+    
+fout.write(cols, names=list(history.history.keys()))
+fout.close()
