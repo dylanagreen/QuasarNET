@@ -2,18 +2,11 @@ from __future__ import print_function
 
 from astropy.io import fits
 import numpy as np
-from numpy import random
 import fitsio
-from random import randint
 from os.path import dirname, isfile
-import glob
+from astropy.table import Table
 
 from quasarnet import utils
-
-# TODO: move this somewhere else? Feels an odd place to keep it?
-# Made a class utils.Wave to replace this. Has these llmin/llmax/dll as
-# default but can add functionality to overwrite this with relative ease. Left
-# without for now to avoid any potential issues.
 
 ################################################################################
 ## Read raw data to be parsed.
