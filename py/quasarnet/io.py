@@ -595,107 +595,6 @@ def read_bal_data_drq(drq, mode='BOSS'):
 
     return bal_flag, bi_civ
 
-## Simulated DESI specific functions.
-def read_bal_data_desisim(truth_files,bal_templates):
-    """
-    Use a truth file and a BAL templates file to construct a dictionary mapping
-    targetid to (bal_flag,bi_civ).
-
-    Inputs:
-     - truth: filename of truth file, str
-     - bal_templates: filename of BAL templates file, str
-    Outputs:
-     - bal_data: {tid: (bal_flag,bi_civ)}, dict
-    """
-
-    ## Open the truth file, extract the templateid corresponding to each
-    ## targetid.
-    tids = []
-    bal_templateid = []
-    for f in truth_files:
-        h = fitsio.FITS(f)
-
-        """
-        ## Needed for qq runs atm
-        tids.append(h['QSO_META']['TARGETID'][:])
-        bal_templateid.append(h['QSO_META']['BAL_TEMPLATEID'][:])
-        """
-        tids.append(h['TRUTH_QSO']['TARGETID'][:])
-        bal_templateid.append(h['TRUTH_QSO']['BAL_TEMPLATEID'][:])
-        h.close()
-
-    tids = np.hstack(tids)
-    bal_templateid = np.hstack(bal_templateid)
-
-    ## Open the templates file, extract the bi_civ for each templateid.
-    h = fitsio.FITS(bal_templates)
-    bi_civ_templates = h['METADATA']['BI_CIV'][:]
-    h.close()
-
-    ## Exclude templateids<0 (i.e. no template used)
-    w = (bal_templateid>=0)
-    bi_civ = bi_civ_templates[bal_templateid[w]]
-    tids = tids[w]
-
-    ## Construct the dictionary mapping targetid to (bal_flag,bi_civ).
-    bal_data = {t:(1,bi) for t,bi in zip(tids,bi_civ)}
-
-    return bal_data
-
-def read_truth_desisim(truth_files):
-
-    tid_field = utils.get_tid_field('DESISIM')
-    truth_fields = utils.get_truth_fields('DESISIM')
-
-    tr_dict = {}
-    tr_dict[tid_field['TARGETID']] = []
-    for k in truth_fields.keys():
-        tr_dict[k] = []
-
-    for f in truth_files:
-
-        h = fitsio.FITS(f)
-
-        tr_dict[tid_field['TARGETID']].append(h[1][tid_field['TARGETID']][:])
-        for k in truth_fields.keys():
-            tr_dict[k].append(h[1][truth_fields[k]][:])
-
-        h.close()
-
-    tr_dict[tid_field['TARGETID']] = np.hstack(tr_dict[tid_field['TARGETID']])
-    for k in truth_fields.keys():
-        tr_dict[k] = np.hstack(tr_dict[k])
-
-    ## For a simulation, we have an absolute truth, and so add "confidence"
-    ## artificially.
-    tr_dict['Z_CONF'] = 4*np.ones_like(tr_dict['Z'])
-
-    ## OBJCLASS is a string, and has trailing spaces (fitsio related).
-    ## We remove them here to avoid confusion.
-    tr_dict['OBJCLASS'] = np.array([y.strip(' ') for y in tr_dict['OBJCLASS']])
-
-    objclass_codes = codify_objclass(tr_dict['OBJCLASS'],'DESISIM')
-    tr_dict['OBJCLASS'] = objclass_codes
-
-    zconf_codes = codify_zconf(tr_dict['Z_CONF'],'DESISIM')
-    tr_dict['Z_CONF'] = zconf_codes
-
-    return tr_dict
-
-def read_targets_desisim(targets,period):
-
-    tid_field = utils.get_tid_field('DESISIM')
-    targeting_bit_col = utils.get_desi_targeting_bit_col(period)
-
-    h = fitsio.FITS(targets)
-
-    ta_dict = {}
-    ta_dict[tid_field['TARGETID']] = h[1][tid_field['TARGETID']][:]
-    ta_dict[targeting_bit_col] = h[1][targeting_bit_col][:]
-
-    h.close()
-
-    return ta_dict
 
 def codify_objclass(objclass,mode):
 
@@ -712,6 +611,7 @@ def codify_objclass(objclass,mode):
         objclass_codes[w] = k
 
     return objclass_codes.astype('i4')
+
 
 def codify_zconf(zconf,mode):
 
