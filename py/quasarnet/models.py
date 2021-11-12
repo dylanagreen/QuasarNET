@@ -2,13 +2,15 @@ from __future__ import print_function
 import numpy as np
 
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Dense, Activation, BatchNormalization, Flatten, Conv1D, concatenate, Lambda
+from tensorflow.keras.layers import Input, Dense, Activation, BatchNormalization, Flatten, Conv1D, concatenate, Lambda, Dropout
 from tensorflow.keras.models import Model
 import tensorflow.keras.backend as K
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.initializers import glorot_uniform, glorot_uniform
 from tensorflow.keras import regularizers
 from tensorflow.keras.activations import softmax, relu
+
+print("version", tf.__version__)
 
 def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc=0, offset_activation_function='rescaled_sigmoid'):
 
@@ -23,15 +25,24 @@ def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc
     ## Max number of filters per layer.
     nfilters_max = 100
     ## Size of each filter.
-    filter_size=10
+    filter_size = 10
     ## Stride length.
     strides = 2
+
+    d_rate = 0.2
+
+    filter_arr = [2, 4, 8, 12]
+#     filter_arr = [20, 15, 10, 6]
+#     filter_arr = [5, 19, 19, 5]
 
     # Set up the convolutional layers.
     for stage in range(nlayers):
         ## Convolutional layer with glorot_uniform initial weights, regularised
         ## with an l2 norm (set to 0 by default).
-        X = Conv1D(nfilters_conv, filter_size, strides = strides,
+#         nfilters = filter_arr[stage]
+        nfilters = nfilters_conv
+
+        X = Conv1D(nfilters, filter_size, strides = strides,
                 name = 'conv_{}'.format(stage+1),
                 kernel_initializer=glorot_uniform(),
                 kernel_regularizer=regularizers.l2(reg_conv))(X)
@@ -40,12 +51,16 @@ def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc
         ## Apply relu activation.
         X = Activation('relu')(X)
 
+        X = Dropout(rate=d_rate)(X)
+
     # Set up the final, fully-connected layer, batch normalising and applying a
     # relu activation function.
     X = Flatten()(X)
     X = Dense(nfilters_max, activation='linear', name='fc_common')(X)
     X = BatchNormalization()(X)
     X = Activation('relu', name='fc_activation')(X)
+
+#     X = Dropout(rate=d_rate)(X)
 
     # Build the "feature detection" units for each line.
     outputs = []
