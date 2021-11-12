@@ -8,6 +8,8 @@ from astropy.table import Table
 
 from quasarnet import utils
 
+from quasarnp.utils import rebin, regrid, renormalize
+
 ################################################################################
 ## Read raw data to be parsed.
 
@@ -145,38 +147,29 @@ def read_spcframe(b_spcframe, r_spcframe, fibers, verbose=False,
     return fids, fliv
 
 ## spall = metadata for all spectra
-def read_spall(spall):
+def read_spall(file_loc):
+    """ Read metadata from a spAll file.
 
-    '''
-    reads data from spall file
+    Parameters
+    ----------
+        file_loc : string
+            Location of the spAll file to read.
+    Returns
+    -------
+        tid : numpy.ndarray
+            Array of integer THING_IDs.
+        pmf2tid : dict
+            Dictionary mapping (PLATE, MJD, FIBERID) to THING_ID.
 
-    Arguments:
-        spall -- filename of spall file
+    """
+    # Open the file, and read plate, mjd, fiberid, thing_id, specprimary.
+    # read() is faster than using [:] since we can read all the columns at once.
+    with fitsio.FITS(file_loc) as h:
+        d = h[1].read(columns=["PLATE", "MJD", "FIBERID", "THING_ID", "SPECPRIMARY"])
 
-    Returns:
-        tid -- array of tids
-        pmf2tid -- dictionary mapping (plate,mjd,fiber_id) => thing_id
-    '''
-
-    ## Open the file, and read plate, mjd, fiberid, thing_id, specprimary.
-    #spall = fitsio.FITS(spall)
-    #plate = spall[1]["PLATE"][:]
-    #mjd = spall[1]["MJD"][:]
-    #fid = spall[1]["FIBERID"][:]
-    #tid = spall[1]["THING_ID"][:].astype(int)
-    #specprim = spall[1]["SPECPRIMARY"][:]
-
-    ## Much faster in astropy.
-    spall = fits.open(spall)
-    plate = spall[1].data['PLATE']
-    mjd = spall[1].data['MJD']
-    fid = spall[1].data['FIBERID']
-    tid = spall[1].data['THING_ID'].astype(int)
-    specprim = spall[1].data['SPECPRIMARY']
-
-    ## Construct a dictionary mapping plate, mjd and fiberid to thing_id.
-    pmf2tid = {(p,m,f):t for p,m,f,t,s in zip(plate,mjd,fid,tid,specprim)}
-    spall.close()
+    # Need to cast THING_ID to int and it's easier to read to do it here.
+    tid = d["THING_ID"].astype(int)
+    pmf2tid = {(p,m,f):t for p,m,f,t,s in zip(d["PLATE"], d["MJD"], d["FIBERID"], tid, d["SPECPRIMARY"])}
 
     return tid, pmf2tid
 
@@ -858,6 +851,270 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, verbose=
 
     return tids,X,Y,z,bal
 
+
+def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, verbose=True, return_spid=False):
+    '''
+    reads data from input file
+
+    Arguments:
+        fi -- list of data files (string iterable)
+        truth -- dictionary thind_id => metadata
+        z_lim -- hiz/loz cut (float)
+        return_spid -- if True also return tuple spectrum identifier
+        nspec -- read this many spectra
+        mode -- which data format are we using
+
+    Returns:
+        tids -- list of thing_ids
+        X -- spectra reformatted to be fed to the network (numpy array)
+        Y -- truth vector (nqso, 5):
+                           STAR = (1,0,0,0,0), GAL = (0,1,0,0,0)
+                           QSO_LZ = (0,0,1,0,0), QSO_HZ = (0,0,0,1,0)
+                           BAD = (0,0,0,0,1)
+        z -- redshift (numpy array)
+        bal -- 1 if bal, 0 if not (numpy array)
+    '''
+
+    tids = []
+    X = []
+    Y = []
+    z = []
+    bal = []
+
+    if return_spid:
+        spid0 = []
+        spid1 = []
+        spid2 = []
+
+    for f in fi:
+        if verbose:
+            print('INFO: reading data from {}'.format(f))
+        h = fitsio.FITS(f)
+        w = np.ones(h[2].get_nrows()).astype(bool)
+        if nspec is not None:
+            w[nspec:] &= False
+        aux_tids = h[2]['TARGETID'][:].astype(int)
+        if verbose:
+            print("INFO: found {} spectra in file {}".format(aux_tids.shape[0], f))
+            print(f"INFO: Using {c0}, {c1} coeffs.")
+        ## remove thing_id == -1 or not in sdrq
+        w_goodtid = (aux_tids != -1)
+
+#         if not (keep_tids is None):
+#             keeps = np.isin(aux_tids, keep_tids)
+#             w_goodtid = w_goodtid & keeps
+
+        if verbose:
+            print("INFO: removing {} spectra with bad tids".format((~w_goodtid).sum()),flush=True)
+        w &= (w_goodtid)
+        aux_tids = aux_tids[w]
+
+        # Loading flux and ivar then rebinning them
+        flux = h[0][:, :]
+        ivar = h[1][:, :]
+
+        wave_grid = 10 ** (c0 + c1 * np.arange(flux.shape[1]))
+
+        flux_out, ivar_out = rebin(flux, ivar, wave_grid)
+        non_zero = ivar_out != 0
+        flux_out[non_zero] /= ivar_out[non_zero]
+
+        # Stacking these to be like the previous version would have just loaded
+        # them so I don't have to rewrite the rest of this function.
+        aux_X = np.hstack((flux_out,ivar_out))
+
+        aux_X = aux_X[w,:]
+
+        if truth is not None:
+            w_in_truth = np.in1d(aux_tids, list(truth.keys()))
+            if verbose:
+                print("INFO: removing {} spectra missing in truth".format((~w_in_truth).sum()),flush=True)
+            aux_tids = aux_tids[w_in_truth]
+            aux_X = aux_X[w_in_truth]
+
+        X.append(aux_X)
+        tids.append(aux_tids)
+
+        if return_spid:
+            try:
+                aux_spid0 = h[2]['SPID0'][:][w]
+                aux_spid1 = h[2]['SPID1'][:][w]
+                aux_spid2 = h[2]['SPID2'][:][w]
+            except ValueError:
+                aux_spid0 = h[2]['PLATE'][:][w]
+                aux_spid1 = h[2]['MJD'][:][w]
+                aux_spid2 = h[2]['FIBERID'][:][w]
+            spid0 += list(aux_spid0)
+            spid1 += list(aux_spid1)
+            spid2 += list(aux_spid2)
+
+    tids = np.concatenate(tids)
+    X = np.concatenate(X)
+
+    if return_spid:
+        spid0 = np.array(spid0)
+        spid1 = np.array(spid1)
+        spid2 = np.array(spid2)
+
+
+    ## Get the number of cells.
+    ncells = X.shape[1]/2.
+    assert ncells==round(ncells)
+    ncells = round(ncells)
+    if verbose:
+        print('INFO: Spectra have {} cells'.format(ncells))
+
+    we = X[:,ncells:]
+    w = we.sum(axis=1)==0
+    if verbose:
+        print("INFO: removing {} spectra with zero weights".format(w.sum()))
+    X = X[~w]
+    tids = tids[~w]
+
+    if return_spid:
+        spid0 = spid0[~w]
+        spid1 = spid1[~w]
+        spid2 = spid2[~w]
+
+    mdata = np.average(X[:,:ncells], weights = X[:,ncells:], axis=1)
+    sdata = np.average((X[:,:ncells]-mdata[:,None])**2,
+            weights = X[:,ncells:], axis=1)
+    sdata=np.sqrt(sdata)
+
+    w = sdata == 0
+    if verbose:
+        print("INFO: removing {} spectra with zero flux".format(w.sum()))
+    X = X[~w]
+    tids = tids[~w]
+    mdata = mdata[~w]
+    sdata = sdata[~w]
+
+    if return_spid:
+        spid0 = spid0[~w]
+        spid1 = spid1[~w]
+        spid2 = spid2[~w]
+
+
+    X = X[:,:ncells]-mdata[:,None]
+    X /= sdata[:,None]
+
+    if truth==None:
+        return tids,X
+
+    ## remove zconf == 0 (not inspected)
+    observed = [(truth[t].objclass>0) or (truth[t].z_conf>0) for t in tids]
+    observed = np.array(observed, dtype=bool)
+    if verbose:
+        print("INFO: removing {} spectra that were not inspected".format((~np.array(observed)).sum()))
+    tids = tids[observed]
+    X = X[observed]
+
+    if return_spid:
+        spid0 = spid0[observed]
+        spid1 = spid1[observed]
+        spid2 = spid2[observed]
+
+
+    ## fill redshifts
+    z = np.zeros(X.shape[0])
+    z[:] = [truth[t].z for t in tids]
+
+    ## fill bal
+    bal = np.zeros(X.shape[0])
+    bal[:] = [(truth[t].bal_flag*(truth[t].bi_civ>0))-\
+            (not truth[t].bal_flag)*(truth[t].bi_civ==0) for t in tids]
+
+    ## fill classes
+    ## classes: 0 = STAR, 1=GALAXY, 2=QSO_LZ, 3=QSO_HZ, 4=BAD (zconf != 3)
+    nclasses = 5
+    objclass = np.array([truth[t].objclass for t in tids])
+    z_conf = np.array([truth[t].z_conf for t in tids])
+
+    Y = get_Y(objclass,z,z_conf,qso_zlim=z_lim)
+
+    ## check that all spectra have exactly one classification
+    assert (Y.sum(axis=1).min()==1) and (Y.sum(axis=1).max()==1)
+
+    if verbose:
+        print("INFO: {} spectra in returned dataset".format(tids.shape[0]))
+
+
+    if return_spid:
+        return tids,X,Y,z,bal,spid0,spid1,spid2
+
+    return tids,X,Y,z,bal
+
+def read_data_desi(filename, truth=None, z_lim=2.1, verbose=True):
+    from quasarnp.io import load_desi_coadd
+
+    X, w = load_desi_coadd(filename)
+    with fitsio.FITS(filename) as h:
+        tids = h["FIBERMAP"].read(columns=["TARGETID"])
+
+    tids = tids[w]
+    tids = np.asarray([t[0] for t in tids])
+
+    # Read the specially joined truth table and get each of the three
+    # columns we're going to need.
+    truth_data = Table.read(truth)
+
+    truth_tids = truth_data["TARGETID"][:]
+    z_conf = truth_data["VI_QUALITY"][:]
+    z_truth = truth_data["VI_Z"]
+    objclass = truth_data["VI_CLASS"][:]
+
+    # Remove any items that don't have a matching truth entry.
+    in_truth = np.isin(tids, truth_tids)
+    if verbose: print(f"{len(in_truth) - np.sum(in_truth)} spectra not in truth.")
+    if not in_truth[0]:
+        print("not in truth?", tids[0])
+    tids = tids[in_truth]
+    X = X[in_truth]
+
+    # Making these dicts for easier access when we pass them off to things like
+    # get_Y
+    z_conf_dict = {t: z_conf[i] for i, t in enumerate(truth_tids)}
+    z_dict = {t: z_truth[i] for i, t in enumerate(truth_tids)}
+    obj_dict = {t: objclass[i] for i, t in enumerate(truth_tids)}
+
+    objclass = np.asarray([obj_dict[t] for t in tids])
+    z_conf = np.asarray([z_conf_dict[t] for t in tids])
+    z = np.asarray([z_dict[t] for t in tids])
+    Y = get_Y_desi(objclass, z, z_conf, qso_zlim=2.1)
+
+    # Setting all BAL flags to 0 should later give them a sample weight of 0.
+    bal = np.zeros(X.shape[0])
+
+    return tids, X, Y, z, bal
+
+
+def get_Y_desi(objclass, z, z_conf, qso_zlim=2.1):
+    Y = np.zeros((objclass.shape[0], 5))
+
+    # STAR
+    w = (objclass == "STAR") & (z_conf >= 2.5)
+    Y[w,0] = 1
+
+    ## GALAXY
+    w = (objclass == "GALAXY") & (z_conf >= 2.5)
+    Y[w,1] = 1
+
+    ## QSO_LZ
+    w = (objclass == "QSO") & (z < qso_zlim) & (z_conf >= 2.5)
+    Y[w,2] = 1
+
+    ## QSO_HZ
+    w = (objclass == "QSO") & (z >= qso_zlim) & (z_conf >= 2.5)
+    Y[w,3] = 1
+
+    ## BAD
+    w = (z_conf < 2.5)
+    Y[w,4] = 1
+
+    return Y
+
+
+
 def get_Y(objclass,z,z_conf,qso_zlim=2.1):
 
     Y = np.zeros((objclass.shape[0],5))
@@ -914,36 +1171,36 @@ def box_offset(z, line='LYA', nboxes = 13, llmin=np.log10(3600.), llmax=np.log10
     return box, offset, weights
 
 # TODO: is this the right place for this?
+# Dylan comment: probably not. This should also work on DESI data without changes
 def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13,
               llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
 
-    box=[]
+    box = []
     sample_weight = []
     for l in lines:
-        # TODO: Do we need to use "weight_line"?
-        box_line, offset_line, weight_line = box_offset(z,
-                line = l, nboxes=nboxes, llmin=llmin, llmax=llmax, dll=dll)
+        box_line, offset_line, _ = box_offset(z, line=l, nboxes=nboxes,
+                                              llmin=llmin, llmax=llmax, dll=dll)
 
-        w = (Y.argmax(axis=1)==2) | (Y.argmax(axis=1)==3)
-        ## set to zero where object is not a QSO
-        ## (the line confidence should be zero)
-        box_line[~w]=0
+        # Set to 0 for non-quasars
+        w = (Y.argmax(axis=1) == 2) | (Y.argmax(axis=1) == 3)
+        box_line[~w] = 0
+
         box.append(np.concatenate([box_line, offset_line], axis=-1))
         sample_weight.append(np.ones(Y.shape[0]))
 
     for l in lines_bal:
-        box_line, offset_line, weight_line = box_offset(z,
-                line = l, nboxes=nboxes, llmin=llmin, llmax=llmax, dll=dll)
+        box_line, offset_line, _ = box_offset(z, line=l, nboxes=nboxes,
+                                              llmin=llmin, llmax=llmax, dll=dll)
 
-        ## set to zero for non-quasars
-        wqso = (Y.argmax(axis=1)==2) | (Y.argmax(axis=1)==3)
+        # Set to 0 for non-quasars
+        wqso = (Y.argmax(axis=1) == 2) | (Y.argmax(axis=1) == 3)
         box_line[~wqso] = 0
 
-        ## set to zero for confident non-bals:
+        # Set to 0 for confident non-bals:
         wnobal = (bal==-1)
         box_line[wnobal] = 0
 
-        ## use only spectra where visual flag and bi_civ do agree
+        # Use only spectra where visual flag and bi_civ agree
         bal_weight = bal != 0
         box.append(np.concatenate([box_line, offset_line], axis=-1))
         sample_weight.append(bal_weight)
