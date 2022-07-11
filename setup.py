@@ -24,7 +24,7 @@ setup(name="quasarnet",
       packages=['quasarnet'],
       package_dir = {'': 'py'},
       install_requires=['scipy','numpy',
-          'fitsio','h5py','tensorflow'],
+          'fitsio','h5py','tensorflow', 'astropy'],
       #test_suite='picca.test.test_cor',
       scripts = scripts
       )
