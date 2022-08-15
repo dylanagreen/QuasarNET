@@ -12,14 +12,15 @@ from tensorflow.keras.activations import softmax, relu
 
 print("version", tf.__version__)
 
-def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc=0, offset_activation_function='rescaled_sigmoid'):
+def QuasarNET(input_shape=None, boxes=13, nlines=1, reg_conv=0., reg_fc=0,
+              offset_activation_function='rescaled_sigmoid', nlayers=4):
 
     X_input = Input(input_shape)
     X = X_input
 
     # Set the parameters.
-    ## Number of convolutional layers
-    nlayers = 4
+    # Padding mode (needs to be "same" in order for 6 layers to be possible)
+    padding_mode = "same" if nlayers > 6 else "valid"
     ## Number of filters in convolutional layers.
     nfilters_conv = 100
     ## Max number of filters per layer.
@@ -42,10 +43,11 @@ def QuasarNET(input_shape =  None, boxes = 13, nlines = 1, reg_conv = 0., reg_fc
 #         nfilters = filter_arr[stage]
         nfilters = nfilters_conv
 
-        X = Conv1D(nfilters, filter_size, strides = strides,
-                name = 'conv_{}'.format(stage+1),
+        X = Conv1D(nfilters, filter_size, strides=strides,
+                name=f"conv_{stage+1}",
                 kernel_initializer=glorot_uniform(),
-                kernel_regularizer=regularizers.l2(reg_conv))(X)
+                kernel_regularizer=regularizers.l2(reg_conv),
+                padding=padding_mode)(X)
         ## Batch normalise in features (axis=-1).
         X = BatchNormalization(axis=-1)(X)
         ## Apply relu activation.
