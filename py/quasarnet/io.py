@@ -7,6 +7,7 @@ from os.path import dirname, isfile
 from astropy.table import Table
 
 from quasarnet import utils
+from quasarnp.io import load_desi_coadd
 
 from quasarnp.utils import rebin, regrid, renormalize
 
@@ -734,7 +735,9 @@ def read_data(fi, truth=None, z_lim=2.1, return_spid=False, nspec=None, verbose=
     return tids,X,Y,z,bal
 
 
-def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, verbose=True, return_spid=False):
+def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None,
+                   verbose=True, return_spid=False, load_photo=False,
+                   linear=False):
     '''
     reads data from input file
 
@@ -745,6 +748,8 @@ def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, v
         return_spid -- if True also return tuple spectrum identifier
         nspec -- read this many spectra
         mode -- which data format are we using
+        load_photo -- whether or not to load photometric flux
+        linear -- whether to load on the linear or logarithmic grids
 
     Returns:
         tids -- list of thing_ids
@@ -762,6 +767,9 @@ def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, v
     Y = []
     z = []
     bal = []
+
+    if load_photo:
+        photos = []
 
     if return_spid:
         spid0 = []
@@ -782,9 +790,30 @@ def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, v
         ## remove thing_id == -1 or not in sdrq
         w_goodtid = (aux_tids != -1)
 
-#         if not (keep_tids is None):
-#             keeps = np.isin(aux_tids, keep_tids)
-#             w_goodtid = w_goodtid & keeps
+        # Loading the photometric fluxes.
+        if load_photo:
+            cols = [f"FLUX_{k}" for k in ["G", "R", "Z", "W1", "W2"]]
+            photo_flux = h[2][cols][:]
+            photo_flux = photo_flux.view((photo_flux.dtype[0], len(cols)))
+
+            ## Code to account for transmission
+            # cols = [f"MW_TRANSMISSION_{k}" for k in ["G", "R", "Z", "W1", "W2"]]
+            # photo_transmission = h[2][cols][:]
+            # photo_transmission = photo_transmission.view((photo_transmission.dtype[0], len(cols)))
+
+            # photo_flux = photo_flux / photo_transmission
+
+            # Normalization
+            photo_flux = np.arcsinh(photo_flux)
+
+            mdata = np.average(photo_flux, axis=1)[:,None]
+            sdata = np.average((photo_flux - mdata) ** 2, axis=1)[:,None]
+            sdata = np.sqrt(sdata)
+
+            photo_flux = photo_flux - mdata
+            photo_flux /= sdata
+
+            photos.append(photo_flux)
 
         if verbose:
             print("INFO: removing {} spectra with bad tids".format((~w_goodtid).sum()),flush=True)
@@ -797,7 +826,7 @@ def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, v
 
         wave_grid = 10 ** (c0 + c1 * np.arange(flux.shape[1]))
 
-        flux_out, ivar_out = rebin(flux, ivar, wave_grid)
+        flux_out, ivar_out = rebin(flux, ivar, wave_grid, linear=linear)
         non_zero = ivar_out != 0
         flux_out[non_zero] /= ivar_out[non_zero]
 
@@ -833,6 +862,9 @@ def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, v
     tids = np.concatenate(tids)
     X = np.concatenate(X)
 
+    if load_photo:
+        photos = np.concatenate(photos)
+
     if return_spid:
         spid0 = np.array(spid0)
         spid1 = np.array(spid1)
@@ -853,6 +885,9 @@ def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, v
     X = X[~w]
     tids = tids[~w]
 
+    if load_photo:
+        photos = photos[~w]
+
     if return_spid:
         spid0 = spid0[~w]
         spid1 = spid1[~w]
@@ -861,7 +896,7 @@ def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, v
     mdata = np.average(X[:,:ncells], weights = X[:,ncells:], axis=1)
     sdata = np.average((X[:,:ncells]-mdata[:,None])**2,
             weights = X[:,ncells:], axis=1)
-    sdata=np.sqrt(sdata)
+    sdata = np.sqrt(sdata)
 
     w = sdata == 0
     if verbose:
@@ -871,14 +906,20 @@ def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, v
     mdata = mdata[~w]
     sdata = sdata[~w]
 
+    if load_photo:
+        photos = photos[~w]
+
     if return_spid:
         spid0 = spid0[~w]
         spid1 = spid1[~w]
         spid2 = spid2[~w]
 
-
-    X = X[:,:ncells]-mdata[:,None]
+    iv_out = X[:, ncells:]
+    X = X[:,:ncells] - mdata[:,None]
     X /= sdata[:,None]
+
+    if load_photo:
+        X = np.hstack([X, photos])
 
     if truth==None:
         return tids,X
@@ -890,6 +931,7 @@ def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, v
         print("INFO: removing {} spectra that were not inspected".format((~np.array(observed)).sum()))
     tids = tids[observed]
     X = X[observed]
+    iv_out = iv_out[observed]
 
     if return_spid:
         spid0 = spid0[observed]
@@ -926,10 +968,10 @@ def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None, v
 
     return tids,X,Y,z,bal
 
-def read_data_desi(filename, truth=None, z_lim=2.1, verbose=True):
+def read_data_desi(filename, truth=None, z_lim=2.1, verbose=True, div_ivar=False, linear=False):
     from quasarnp.io import load_desi_coadd
 
-    X, w = load_desi_coadd(filename)
+    X, w, iv_out = load_desi_coadd(filename, div_ivar=div_ivar, linear=linear)
     with fitsio.FITS(filename) as h:
         tids = h["FIBERMAP"].read(columns=["TARGETID"])
 
