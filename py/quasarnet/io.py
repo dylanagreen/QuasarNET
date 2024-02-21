@@ -990,10 +990,21 @@ def read_data_desi(filename, truth=None, z_lim=2.1, verbose=True, div_ivar=False
     # Remove any items that don't have a matching truth entry.
     in_truth = np.isin(tids, truth_tids)
     if verbose: print(f"{len(in_truth) - np.sum(in_truth)} spectra not in truth.")
-    if not in_truth[0]:
-        print("not in truth?", tids[0])
     tids = tids[in_truth]
     X = X[in_truth]
+
+    iv_out = iv_out[in_truth]
+
+    # Remove items with absurd flux
+    print(X.shape)
+    flux_cut = ~(np.sum(np.abs(np.diff(X)) >= 1e4, axis=1) >= 1)
+    print(flux_cut.shape)
+    if np.any(flux_cut):
+        if verbose: print(f"{len(flux_cut) - np.sum(flux_cut)} spectra removed by flux cut.")
+        tids = tids[flux_cut]
+        X = X[flux_cut]
+
+        iv_out = iv_out[flux_cut]
 
     # Making these dicts for easier access when we pass them off to things like
     # get_Y
