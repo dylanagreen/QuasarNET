@@ -968,10 +968,10 @@ def read_data_boss(fi, truth=None, c0=3.555, c1=0.0001, z_lim=2.1, nspec=None,
 
     return tids,X,Y,z,bal
 
-def read_data_desi(filename, truth=None, z_lim=2.1, verbose=True, div_ivar=False, linear=False):
+def read_data_desi(filename, truth=None, z_lim=2.1, verbose=True, linear=False):
     from quasarnp.io import load_desi_coadd
 
-    X, w, iv_out = load_desi_coadd(filename, div_ivar=div_ivar, linear=linear)
+    X, w = load_desi_coadd(filename, linear=linear)
     with fitsio.FITS(filename) as h:
         tids = h["FIBERMAP"].read(columns=["TARGETID"])
 
@@ -993,8 +993,6 @@ def read_data_desi(filename, truth=None, z_lim=2.1, verbose=True, div_ivar=False
     tids = tids[in_truth]
     X = X[in_truth]
 
-    iv_out = iv_out[in_truth]
-
     # Remove items with absurd flux
     print(X.shape)
     flux_cut = ~(np.sum(np.abs(np.diff(X)) >= 1e4, axis=1) >= 1)
@@ -1003,8 +1001,6 @@ def read_data_desi(filename, truth=None, z_lim=2.1, verbose=True, div_ivar=False
         if verbose: print(f"{len(flux_cut) - np.sum(flux_cut)} spectra removed by flux cut.")
         tids = tids[flux_cut]
         X = X[flux_cut]
-
-        iv_out = iv_out[flux_cut]
 
     # Making these dicts for easier access when we pass them off to things like
     # get_Y
@@ -1088,6 +1084,11 @@ def box_offset(z, line='LYA', nboxes = 13, llmin=np.log10(3600.), llmax=np.log10
 
     ## Interpolate the locations of the line in each object in terms of
     ## wavelength to the position in terms of the number of boxes.
+
+    # First generates a function that interpolates the wave grid
+    # to indices in the grid, then calculates the observer frame wavelength
+    # of the line. Interpolates that wavelength to the index it owuld
+    # appear in, then assigns it to its corresponding box.
     wave_to_i = interp1d(wave.wave_grid, np.arange(len(wave.wave_grid)),
             bounds_error=False, fill_value=-1)
     wave_line = (1+z)*absorber_IGM[line]
