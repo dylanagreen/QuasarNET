@@ -1077,10 +1077,11 @@ def get_Y(objclass,z,z_conf,qso_zlim=2.1):
 
 # TODO: should this go in utils maybe?
 from .utils import absorber_IGM
+from quasarnp.utils import wave, linear_wave
 from scipy.interpolate import interp1d
-def box_offset(z, line='LYA', nboxes = 13, llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
+def box_offset(z, line='LYA', nboxes = 13, wave=wave):
 
-    wave = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
+    # wave = utils.Wave(llmin=llmin,llmax=llmax,dll=dll)
 
     ## Interpolate the locations of the line in each object in terms of
     ## wavelength to the position in terms of the number of boxes.
@@ -1089,10 +1090,10 @@ def box_offset(z, line='LYA', nboxes = 13, llmin=np.log10(3600.), llmax=np.log10
     # to indices in the grid, then calculates the observer frame wavelength
     # of the line. Interpolates that wavelength to the index it owuld
     # appear in, then assigns it to its corresponding box.
-    wave_to_i = interp1d(wave.wave_grid, np.arange(len(wave.wave_grid)),
+    wave_to_i = interp1d(wave, np.arange(len(wave)),
             bounds_error=False, fill_value=-1)
     wave_line = (1+z)*absorber_IGM[line]
-    pos = wave_to_i(wave_line)/len(wave.wave_grid)*nboxes
+    pos = wave_to_i(wave_line)/len(wave)*nboxes
     ipos = np.floor(pos).astype(int)
 
     box = np.zeros((len(z), nboxes))
@@ -1109,13 +1110,13 @@ def box_offset(z, line='LYA', nboxes = 13, llmin=np.log10(3600.), llmax=np.log10
 # TODO: is this the right place for this?
 # Dylan comment: probably not. This should also work on DESI data without changes
 def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13,
-              llmin=np.log10(3600.), llmax=np.log10(10000.), dll=1.e-3):
+              wave=wave):
 
     box = []
     sample_weight = []
     for l in lines:
         box_line, offset_line, _ = box_offset(z, line=l, nboxes=nboxes,
-                                              llmin=llmin, llmax=llmax, dll=dll)
+                                              wave=wave)
 
         # Set to 0 for non-quasars
         w = (Y.argmax(axis=1) == 2) | (Y.argmax(axis=1) == 3)
@@ -1126,7 +1127,7 @@ def objective(z, Y, bal, lines=['LYA'], lines_bal=['CIV(1548)'], nboxes=13,
 
     for l in lines_bal:
         box_line, offset_line, _ = box_offset(z, line=l, nboxes=nboxes,
-                                              llmin=llmin, llmax=llmax, dll=dll)
+                                              wave=wave)
 
         # Set to 0 for non-quasars
         wqso = (Y.argmax(axis=1) == 2) | (Y.argmax(axis=1) == 3)
