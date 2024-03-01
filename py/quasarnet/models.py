@@ -22,7 +22,7 @@ def QuasarNET(input_shape=None, boxes=13, nlines=1, reg_conv=0., reg_fc=0,
 
     # Set the parameters.
     # Padding mode (needs to be "same" in order for 6 layers to be possible)
-    padding_mode = "same" if nlayers > 6 else "valid"
+    padding_mode = "same" if nlayers >= 6 else "valid"
     ## Number of filters in convolutional layers.
     nfilters_conv = 100
     ## Max number of filters per layer.
